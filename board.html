@@ -59,7 +59,7 @@
 <header class="topbar">
   <div class="wrap in">
     <a class="wordmark" href="./" aria-label="GPHG 2026 Ballot home"><b>GPHG</b><span>2026</span><small>Ballot</small></a>
-    <nav class="topnav"><a href="./">Make a ballot</a><a class="on" href="board.html">Standings</a></nav>
+    <nav class="topnav"><a href="./">Ballot</a><a class="on" href="board.html">Standings</a></nav>
   </div>
 </header>
 
@@ -163,7 +163,7 @@
       const data = c[p.key]; if (!data.n) return '';
       const ids = Object.keys(data.counts).map(Number).sort((a, b) => data.counts[b] - data.counts[a] || a - b);
       const win = Object.prototype.hasOwnProperty.call(results, p.key) ? results[p.key] : undefined;
-      const rows = ids.map(id => { const w = D.watches[id]; const pct = Math.round(data.counts[id] / data.n * 100); return `<div class="barrow ${win === id ? 'win' : ''}"><div class="pic" data-detail="${id}" role="button" tabindex="0"><img src="${G.thumb(id)}" alt="" loading="lazy"></div><div class="lab"><b>${esc(w.brand)}${win === id ? ' · winner' : ''}</b><span>${esc(w.name)}</span><div class="bar"><i style="width:${pct}%"></i></div></div><div class="pct">${pct}%</div></div>`; }).join('');
+      const rows = ids.map(id => { const w = D.watches[id]; const pct = Math.round(data.counts[id] / data.n * 100); return `<div class="barrow ${win === id ? 'win' : ''}"><div class="pic" data-detail="${id}" role="button" tabindex="0"><img src="${G.thumb(id)}" alt="" loading="lazy"></div><div class="lab"><b>${esc(w.brand)}${win === id ? ' · winner' : ''}</b><span>${esc(w.name)}</span><div class="meter"><i style="width:${pct}%"></i></div></div><div class="pct">${pct}%</div></div>`; }).join('');
       return `<div class="cons"><div class="sechead">${esc(p.name)}<span class="pts">${data.n} ${data.n === 1 ? 'pick' : 'picks'}${win === null ? ' · not awarded' : ''}</span></div><div class="bars">${rows}</div></div>`;
     }).join('');
   }
