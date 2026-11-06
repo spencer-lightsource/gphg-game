@@ -69,6 +69,8 @@
   let D = null;
   const STEPS = Array.from({ length: 14 }, (_, i) => 'cat-' + i).concat(['aiguille', 'review']);
   const S = { name: '', picks: G.emptyPicks(), step: null, submitted: null, viewing: null, lastStep: null };
+  const ARCHIVE = 'gphg26.archive';   // other people's locked ballots on this device
+  function archive() { return (G.lsGet(ARCHIVE, []) || []).filter(x => x && x.code && G.decodeBallot(x.code)); }
   const app = document.getElementById('app');
   let sheetDepth = 0;
 
@@ -190,7 +192,8 @@
             <div class="field"><label for="name">Your name</label><input class="input" id="name" type="text" maxlength="40" autocomplete="name" placeholder="So the scorecard is yours" value="${esc(S.name)}" required></div>
             <button class="btn big red" type="submit" ${G.isLocked() ? 'disabled' : ''}>Start the ballot →</button>
           </form>
-          ${S.submitted ? '<p class="small muted" style="margin-top:14px">Want a second ballot for someone else on this phone? <button class="linkbtn" data-act="reset">Start a new one</button>.</p>' : ''}
+          ${S.submitted ? '<p class="small muted" style="margin-top:14px">Someone else want to play on this device? <button class="linkbtn" data-act="reset">Start a new ballot</button>. ' + esc(S.submitted.name) + '’s stays in the pool.</p>' : ''}
+          ${archive().length ? `<div class="resume" style="margin-top:12px"><div class="eyebrow gray">Also on this device</div>${archive().map(x => `<div class="small" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0"><span><b>${esc(x.name)}</b> · locked ${esc(G.fmtDate(x.ts))}</span><button class="btn sm ghost" data-act="switch:${esc(x.code)}">Switch to ${esc(x.name)}</button></div>`).join('')}</div>` : ''}
         </div>
         <div>
           <div class="sechead" style="margin-top:0">How it works</div>
@@ -213,10 +216,29 @@
     app.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
     app.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
   }
+  function stashCurrent() {
+    if (!S.submitted) return;
+    const list = archive().filter(x => x.code !== S.submitted.code);
+    list.unshift({ name: S.submitted.name, code: S.submitted.code, ts: S.submitted.ts });
+    G.lsSet(ARCHIVE, list.slice(0, 8));
+  }
   function firstIncomplete() { const i = S.picks.cats.findIndex(x => x == null); if (i >= 0) return 'cat-' + i; if (S.picks.aiguille == null) return 'aiguille'; return 'review'; }
   function act(a) {
     if (a === 'resume') go(firstIncomplete());
-    else if (a === 'reset') { if (!confirm('Start a fresh ballot on this device? The saved one stays valid wherever its link was sent.')) return; S.name = ''; S.picks = G.emptyPicks(); S.submitted = null; G.lsDel(G.KEYS.draft); G.lsDel(G.KEYS.ballot); G.lsDel(G.KEYS.name); go('landing'); }
+    else if (a === 'reset') {
+      const who = S.submitted ? S.submitted.name : S.name;
+      if (!confirm(S.submitted ? `Start a new ballot for someone else? ${who}’s ballot stays in the pool, and you can switch back to it from this page.` : 'Start over with a blank ballot?')) return;
+      stashCurrent();
+      S.name = ''; S.picks = G.emptyPicks(); S.submitted = null; G.lsDel(G.KEYS.draft); G.lsDel(G.KEYS.ballot); G.lsDel(G.KEYS.name); go('landing');
+    }
+    else if (a.startsWith('switch:')) {
+      const code = a.slice(7); const target = archive().find(x => x.code === code); if (!target) return;
+      stashCurrent();
+      G.lsSet(ARCHIVE, archive().filter(x => x.code !== code));
+      const b = G.decodeBallot(code); S.submitted = b; S.name = b.name; S.picks = JSON.parse(JSON.stringify(b.picks));
+      G.lsSet(G.KEYS.ballot, { name: b.name, ts: b.ts, code }); G.lsDel(G.KEYS.draft); G.lsSet(G.KEYS.name, b.name);
+      syncPool(); go('card');
+    }
     else if (a === 'edit') {
       if (!S.submitted) return;
       // Resume an edit already in progress; otherwise start editing from the locked picks.
