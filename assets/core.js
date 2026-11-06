@@ -7,7 +7,7 @@
   const LOCK_AT = Date.parse('2026-11-07T18:00:00+01:00');
   const CAT_COUNT = 14;
   const SPECIALS = ['aiguille', 'audacity', 'revelation', 'chronometry'];
-  const KEYS = { draft: 'gphg26.draft', ballot: 'gphg26.ballot', extra: 'gphg26.extraBallots', name: 'gphg26.name' };
+  const KEYS = { draft: 'gphg26.draft', ballot: 'gphg26.ballot', extra: 'gphg26.extraBallots', name: 'gphg26.name', token: 'gphg26.token', pooled: 'gphg26.pooled', poolkey: 'gphg26.poolkey' };
 
   let DATA = null;
 
@@ -120,18 +120,75 @@
   }
 
   // Merge ballots: one per name (case/whitespace/Unicode-insensitive); keep the latest that arrived before the lock.
-  // A ballot is late if either its own timestamp or the commissioner's receipt time (b.received, when known) is at/after the lock.
+  // A ballot is late if either its own timestamp or the pool's receipt time (b.received, when known) is at/after the lock.
+  // Impersonation guard: the first submission carrying a device token claims the name; later submissions under that
+  // name count only if they carry the same token (or no token at all, i.e. added by the commissioner).
   function mergeBallots(lists) {
-    const map = new Map();
+    const groups = new Map();
     const late = [];
+    const seen = new Set();
     for (const list of lists) for (const b of list || []) {
       if (!b || !b.name || !b.picks) continue;
+      const dk = b.code || (nameKey(b.name) + '|' + b.ts);
+      if (seen.has(dk)) continue; seen.add(dk);
       if (Math.max(b.ts || 0, b.received || 0) >= LOCK_AT) { late.push(b); continue; }
       const k = nameKey(b.name);
-      const cur = map.get(k);
-      if (!cur || b.ts > cur.ts) map.set(k, b);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(b);
     }
-    return { ballots: [...map.values()].sort((a, b) => a.ts - b.ts), late };
+    const ballots = [];
+    for (const g of groups.values()) {
+      g.sort((a, b) => (a.received || a.ts) - (b.received || b.ts) || a.ts - b.ts);
+      const owner = (g.find(b => b.token) || {}).token || null;
+      const ok = g.filter(b => !b.token || !owner || b.token === owner);
+      ok.sort((a, b) => b.ts - a.ts || (b.received || 0) - (a.received || 0));
+      if (ok.length) ballots.push(ok[0]);
+    }
+    return { ballots: ballots.sort((a, b) => a.ts - b.ts), late };
+  }
+
+  /* ---------- the live pool (Cloud Run + Firestore) ---------- */
+  const POOL = 'https://gphg-pool-947634975635.us-central1.run.app';
+  function deviceToken() {
+    let t = lsGet(KEYS.token, '');
+    if (!t) { const a = new Uint8Array(12); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = Math.floor(Math.random() * 256)); t = Array.from(a, x => x.toString(16).padStart(2, '0')).join(''); lsSet(KEYS.token, t); }
+    return t;
+  }
+  async function poolSubmit(ballot, token) {
+    const res = await fetch(POOL + '/ballots', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ballot.code, name: ballot.name, ts: ballot.ts, token: token === undefined ? deviceToken() : token }) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || ('pool ' + res.status));
+    return j;
+  }
+  async function poolList() {
+    const res = await fetch(POOL + '/ballots', { cache: 'no-store' });
+    if (!res.ok) throw new Error('pool ' + res.status);
+    const j = await res.json();
+    return (j.ballots || []).map(x => { const d = decodeBallot(x.code); if (!d) return null; d.received = Number(x.received) || d.ts; d.token = x.token || null; d.poolId = x.id || null; return d; }).filter(Boolean);
+  }
+  async function poolResults() {
+    const res = await fetch(POOL + '/results', { cache: 'no-store' });
+    if (!res.ok) throw new Error('pool ' + res.status);
+    return res.json();
+  }
+  async function poolDelete(poolId, key) {
+    const res = await fetch(POOL + '/ballots/' + encodeURIComponent(poolId), { method: 'DELETE', headers: { 'X-Key': key } });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || ('pool ' + res.status));
+    return j;
+  }
+  async function poolSetResults(results, key) {
+    const res = await fetch(POOL + '/results', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Key': key }, body: JSON.stringify({ results }) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || ('pool ' + res.status));
+    return j;
+  }
+
+  // How alike two ballots are: per-prize agreement.
+  function compareBallots(a, b) {
+    const rows = prizeList().map(p => { const x = pickFor(a.picks, p), y = pickFor(b.picks, p); return { prize: p, a: x, b: y, same: x != null && x === y, both: x != null && y != null }; });
+    const n = rows.filter(r => r.both).length, same = rows.filter(r => r.same).length;
+    return { rows, same, n, pct: n ? Math.round(same / n * 100) : 0 };
   }
 
   // results.json hygiene: keep only known prize keys with null or a valid watch id (category prizes must point into their own category).
@@ -179,5 +236,5 @@
   function watchLabel(id) { const w = DATA.watches[id]; return w ? w.brand + ' ' + w.name : '—'; }
   function possessive(name) { name = String(name || '').trim(); return /s$/i.test(name) ? name + '’' : name + '’s'; }
 
-  window.GPHG = { SITE, LOCK_AT, CAT_COUNT, SPECIALS, KEYS, loadData, loadJSON, get data() { return DATA; }, watchesInCat, catOf, thumb, full, emptyPicks, cleanName, nameKey, encodeBallot, decodeBallot, ballotURL, prizeList, pickFor, scoreBallot, maxPoints, rankBallots, mergeBallots, sanitizeResults, leaders, consensus, lsGet, lsSet, lsDel, esc, fmtDate, fmtLock, isLocked, watchLabel, possessive };
+  window.GPHG = { SITE, POOL, LOCK_AT, CAT_COUNT, SPECIALS, KEYS, loadData, loadJSON, get data() { return DATA; }, watchesInCat, catOf, thumb, full, emptyPicks, cleanName, nameKey, encodeBallot, decodeBallot, ballotURL, prizeList, pickFor, scoreBallot, maxPoints, rankBallots, mergeBallots, sanitizeResults, leaders, consensus, compareBallots, deviceToken, poolSubmit, poolList, poolResults, poolSetResults, poolDelete, lsGet, lsSet, lsDel, esc, fmtDate, fmtLock, isLocked, watchLabel, possessive };
 })();

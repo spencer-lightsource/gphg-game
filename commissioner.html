@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;700;800&display=swap">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=20261106b">
 <style>
   .loading { padding: 60px 0; text-align: center; color: var(--muted); }
   .box { border: 1px solid var(--ink); padding: 18px; margin: 16px 0; }
@@ -34,13 +34,13 @@
 <main id="app" class="wrap"><div class="loading">Loading…</div></main>
 <footer><div class="wrap">Owner tools. Nothing here is published until the JSON files are committed to the site.</div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="assets/core.js"></script>
+<script src="assets/core.js?v=20261106b"></script>
 <script>
 (function () {
   'use strict';
   const G = window.GPHG, esc = G.esc;
   const app = document.getElementById('app');
-  let D, published = [], results = {}, pool = new Map();
+  let D, published = [], results = {}, pool = new Map(), poolOk = false;
 
   async function boot() {
     try { D = await G.loadData(); } catch (e) { app.innerHTML = '<div class="notice red" style="margin-top:24px">Could not load data/watches.json: ' + esc(e.message) + '</div>'; return; }
@@ -52,9 +52,14 @@
       const d = x && x.code ? G.decodeBallot(x.code) : null;
       if (!d) return;
       const t = x.received ? Date.parse(x.received) : NaN;
-      d.received = isFinite(t) ? t : d.ts;
+      d.received = isFinite(t) ? t : d.ts; d.source = 'file';
       pool.set(d.code, d);
     });
+    const live = await G.poolList().catch(() => null);
+    poolOk = Array.isArray(live);
+    (live || []).forEach(d => { d.source = 'pool'; pool.set(d.code, d); });
+    const liveRes = await G.poolResults().catch(() => null);
+    if (liveRes && liveRes.results && Object.keys(liveRes.results).length) results = G.sanitizeResults(liveRes.results).clean;
     published = [...pool.values()];
     render();
   }
@@ -69,7 +74,7 @@
       const k = b.name.trim().toLowerCase(); const kept = m.ballots.find(x => x.code === b.code);
       const isLate = Math.max(b.ts || 0, b.received || 0) >= G.LOCK_AT;
       const st = isLate ? '<span class="pill red">late</span>' : kept ? (dupes.get(k) > 1 ? '<span class="pill">latest of ' + dupes.get(k) + '</span>' : '<span class="pill gray">ok</span>') : '<span class="pill gray">superseded</span>';
-      return `<tr><td>${esc(b.name)}</td><td class="small muted">${esc(G.fmtDate(b.ts))}<br><span class="tiny">received ${esc(G.fmtDate(b.received || b.ts))}</span></td><td class="small">${b.picks.aiguille == null ? '—' : esc(G.watchLabel(b.picks.aiguille))}</td><td>${st}</td><td><button class="linkbtn" data-rm="${esc(b.code)}">remove</button></td></tr>`;
+      return `<tr><td>${esc(b.name)}<div class="tiny muted">${b.source === 'pool' ? 'in the pool' : b.source === 'file' ? 'published file' : 'added here, not posted'}</div></td><td class="small muted">${esc(G.fmtDate(b.ts))}<br><span class="tiny">received ${esc(G.fmtDate(b.received || b.ts))}</span></td><td class="small">${b.picks.aiguille == null ? '—' : esc(G.watchLabel(b.picks.aiguille))}</td><td>${st}</td><td><button class="linkbtn" data-rm="${esc(b.code)}">remove</button></td></tr>`;
     }).join('');
     const ballotsJSON = JSON.stringify([...pool.values()].sort((a, b) => a.ts - b.ts).map(b => ({ name: b.name, submitted: new Date(b.ts).toISOString(), received: new Date(b.received || b.ts).toISOString(), code: b.code })), null, 1);
 
@@ -90,7 +95,7 @@
 
       <div class="box">
         <h2>1 · Ballots</h2>
-        <p>Paste the links your friends sent you (any mix of links or raw codes, one per line or all at once). ${published.length} already published.</p>
+        <p>${poolOk ? 'Live pool loaded.' : '<span style="color:var(--red)">Could not reach the live pool; showing the published file only.</span>'} Every locked ballot lands here on its own. To add one by hand (a link someone texted you), paste it below; it is posted straight into the pool.</p>
         <textarea class="ta" id="paste" placeholder="https://spencer-lightsource.github.io/gphg-game/#b=…"></textarea>
         <div class="btns"><button class="btn sm" id="add">Add to pool</button></div>
         <div class="tblwrap"><table class="tbl" style="margin-top:16px;min-width:560px"><thead><tr><th>Name</th><th>Submitted</th><th>Aiguille d’Or</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">No ballots in the pool yet.</td></tr>'}</tbody></table></div>
@@ -103,13 +108,18 @@
         <h2>2 · Winners</h2>
         <p>Set each prize as it is announced. Leave “Not announced yet” for the rest; the standings page scores only what is announced. Discretionary prizes can be marked “Not awarded”.</p>
         ${spSel}${catSel}
-        <div class="btns"><button class="btn sm" id="dlr">Download results.json</button><button class="btn sm ghost" id="cpr">Copy JSON</button><button class="btn sm ghost" id="clr">Clear all</button></div>
+        <div class="formgrid" style="align-items:end;margin-top:14px">
+          <div><label for="poolkey">Commissioner key</label><input class="input" id="poolkey" type="password" autocomplete="off" placeholder="gphg-…" value="${esc(G.lsGet(G.KEYS.poolkey, '') || '')}" style="font-size:14px"></div>
+          <div class="btns" style="margin:0"><button class="btn sm red" id="pubpool">Publish winners</button><button class="btn sm ghost" id="savekey">Save key here</button></div>
+        </div>
+        <p class="small" id="poolpubstatus" style="margin-top:8px"></p>
+        <div class="btns"><button class="btn sm ghost" id="dlr">Download results.json</button><button class="btn sm ghost" id="cpr">Copy JSON</button><button class="btn sm ghost" id="clr">Clear all</button></div>
         <pre class="out" id="rjson">${esc(JSON.stringify(results, null, 1))}</pre>
       </div>
 
       <div class="box">
-        <h2>3 · Publish</h2>
-        <p>Fastest, works from your phone: paste a GitHub token once and publish straight to the site. The token stays in this browser only.</p>
+        <h2>3 · Fallback publishing (only if the pool is down)</h2>
+        <p>Normally you never need this: ballots land in the pool by themselves and “Publish winners” above posts results instantly. If the pool were unreachable, the site falls back to the files below. Paste a GitHub token once and publish straight to the repo; the token stays in this browser only.</p>
         <div class="formgrid" style="align-items:end">
           <div><label for="ghtoken">GitHub token</label><input class="input" id="ghtoken" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(G.lsGet('gphg26.ghtoken', '') || '')}" style="font-size:14px"></div>
           <div class="btns" style="margin:0"><button class="btn sm ghost" id="savetok">Save on this device</button><button class="btn sm ghost" id="forgettok">Forget</button></div>
@@ -127,10 +137,27 @@ git add data && git commit -m "Update pool" && git push</pre>
     app.querySelector('#add').addEventListener('click', () => {
       const codes = (app.querySelector('#paste').value.match(/[A-Za-z0-9_-]{20,}/g) || []).map(G.decodeBallot).filter(Boolean);
       if (!codes.length) { toast('No valid ballots found'); return; }
-      let n = 0; codes.forEach(b => { if (!pool.has(b.code)) { b.received = Date.now(); pool.set(b.code, b); n++; } });
-      toast(n + ' added'); render();
+      (async () => {
+        let n = 0, posted = 0, failed = 0;
+        for (const b of codes) {
+          if (pool.has(b.code) && pool.get(b.code).source === 'pool') continue;
+          b.received = Date.now(); n++;
+          try { await G.poolSubmit(b, ''); b.source = 'pool'; posted++; } catch (e) { b.source = 'local'; failed++; }
+          pool.set(b.code, b);
+        }
+        toast(n + ' added · ' + posted + ' posted to the pool' + (failed ? ' · ' + failed + ' failed' : '')); render();
+      })();
     });
-    app.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { pool.delete(b.dataset.rm); render(); }));
+    app.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', async () => {
+      const entry = pool.get(b.dataset.rm);
+      if (entry && entry.source === 'pool' && entry.poolId) {
+        const k = (app.querySelector('#poolkey').value || G.lsGet(G.KEYS.poolkey, '') || '').trim();
+        if (!k) { toast('Paste the commissioner key (section 2) to remove from the pool'); return; }
+        if (!confirm('Remove ' + entry.name + '’s ballot from the live pool?')) return;
+        try { await G.poolDelete(entry.poolId, k); toast('Removed from the pool'); } catch (e) { toast('Remove failed: ' + e.message); return; }
+      }
+      pool.delete(b.dataset.rm); render();
+    }));
     app.querySelector('#dlb').addEventListener('click', () => dl('ballots.json', app.querySelector('#bjson').textContent));
     app.querySelector('#cpb').addEventListener('click', () => copy(app.querySelector('#bjson').textContent));
     app.querySelectorAll('select[data-key]').forEach(s => s.addEventListener('change', () => {
@@ -141,6 +168,14 @@ git add data && git commit -m "Update pool" && git push</pre>
     app.querySelector('#dlr').addEventListener('click', () => dl('results.json', JSON.stringify(results, null, 1)));
     app.querySelector('#cpr').addEventListener('click', () => copy(JSON.stringify(results, null, 1)));
     app.querySelector('#clr').addEventListener('click', () => { if (confirm('Clear all winners?')) { results = {}; render(); } });
+    app.querySelector('#savekey').addEventListener('click', () => { const k = app.querySelector('#poolkey').value.trim(); if (!k) { toast('Paste the key first'); return; } G.lsSet(G.KEYS.poolkey, k); toast('Key saved on this device'); });
+    app.querySelector('#pubpool').addEventListener('click', async () => {
+      const st = app.querySelector('#poolpubstatus'); const k = (app.querySelector('#poolkey').value || G.lsGet(G.KEYS.poolkey, '') || '').trim();
+      if (!k) { st.innerHTML = '<span style="color:var(--red);font-weight:700">Paste the commissioner key first.</span>'; return; }
+      st.textContent = 'Publishing…';
+      try { await G.poolSetResults(results, k); st.innerHTML = '<span style="color:var(--good);font-weight:700">Published to the pool</span> · ' + Object.keys(results).length + ' prizes set. The <a href="board.html" target="_blank" rel="noopener">standings</a> update immediately.'; toast('Winners published'); }
+      catch (e) { st.innerHTML = '<span style="color:var(--red);font-weight:700">Failed.</span> ' + esc(e.message); toast('Publish failed'); }
+    });
     app.querySelector('#savetok').addEventListener('click', () => { const t = app.querySelector('#ghtoken').value.trim(); if (!t) { toast('Paste a token first'); return; } G.lsSet('gphg26.ghtoken', t); toast('Token saved on this device'); });
     app.querySelector('#forgettok').addEventListener('click', () => { G.lsDel('gphg26.ghtoken'); app.querySelector('#ghtoken').value = ''; toast('Token forgotten'); });
     app.querySelector('#pubb').addEventListener('click', () => publishAll(['ballots']));

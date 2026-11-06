@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;700;800&display=swap">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=20261106b">
 <style>
   body.noscroll { overflow: hidden; }
   .statgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--ink); margin: 20px 0 0; }
@@ -68,35 +68,38 @@
 <footer><div class="wrap">Nominee details and photographs are from <a href="https://www.gphg.org/en/gphg-2026/nominated-timepieces" target="_blank" rel="noopener">gphg.org</a>, © Fondation du Grand Prix d'Horlogerie de Genève. This is a friends' prediction pool and is not affiliated with the GPHG.</div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/core.js"></script>
+<script src="assets/core.js?v=20261106b"></script>
 <script>
 (function () {
   'use strict';
   const G = window.GPHG, esc = G.esc;
   const app = document.getElementById('app');
-  let D, results = {}, ballots = [], late = [], tab = 'standings', me = null, openRow = null, publishedCount = 0, meUnsent = false;
+  let D, results = {}, ballots = [], late = [], tab = 'standings', me = null, openRow = null, publishedCount = 0, meUnsent = false, poolOk = false, cmpA = null, cmpB = null;
 
   async function boot() {
     try { D = await G.loadData(); } catch (e) { app.innerHTML = '<div class="notice red">Could not load nominee data.</div>'; return; }
-    const [b, r] = await Promise.all([G.loadJSON('data/ballots.json', []), G.loadJSON('data/results.json', {})]);
-    results = G.sanitizeResults(r || {}).clean;
+    const [b, r, live, liveRes] = await Promise.all([G.loadJSON('data/ballots.json', []), G.loadJSON('data/results.json', {}), G.poolList().catch(() => null), G.poolResults().catch(() => null)]);
+    poolOk = Array.isArray(live);
+    const liveResults = liveRes && liveRes.results && Object.keys(liveRes.results).length ? liveRes.results : null;
+    results = G.sanitizeResults(liveResults || r || {}).clean;
     const published = (Array.isArray(b) ? b : []).map(x => {
       if (!x || !x.code) return null;
       const d = G.decodeBallot(x.code);
       if (d && x.received) { const t = Date.parse(x.received); if (isFinite(t)) d.received = t; }
       return d;
     }).filter(Boolean);
-    publishedCount = published.length;
+    const pooled = live || [];
+    publishedCount = published.length + pooled.length;
     const extra = (G.lsGet(G.KEYS.extra, []) || []).map(G.decodeBallot).filter(Boolean);
     const mine = G.lsGet(G.KEYS.ballot); if (mine && mine.code) { me = G.decodeBallot(mine.code); }
-    meUnsent = !!(me && !published.some(x => x.code === me.code));
+    meUnsent = !!(me && !published.some(x => x.code === me.code) && !pooled.some(x => x.code === me.code));
     // ballots passed in the URL (#add=code,code) are merged for this viewer only
     const addm = (location.hash || '').match(/[#&]add=([A-Za-z0-9_,-]+)/);
     const fromUrl = addm ? addm[1].split(',').map(G.decodeBallot).filter(Boolean) : [];
     if (fromUrl.length) { const cur = G.lsGet(G.KEYS.extra, []) || []; fromUrl.forEach(x => { if (!cur.includes(x.code)) cur.push(x.code); }); G.lsSet(G.KEYS.extra, cur); }
-    const merged = G.mergeBallots([published, extra, fromUrl, me ? [me] : []]);
+    const merged = G.mergeBallots([pooled, published, extra, fromUrl, me ? [me] : []]);
     ballots = merged.ballots; late = merged.late;
-    const t = (location.hash || '').match(/tab=(standings|consensus|winners)/); if (t) tab = t[1];
+    const t = (location.hash || '').match(/tab=(standings|compare|consensus|winners)/); if (t) tab = t[1];
     render();
   }
 
@@ -118,10 +121,12 @@
       ${stats}${lead}
       <div class="tabs" role="tablist">
         <button role="tab" data-tab="standings" aria-selected="${tab === 'standings'}" class="${tab === 'standings' ? 'on' : ''}">Standings</button>
+        <button role="tab" data-tab="compare" aria-selected="${tab === 'compare'}" class="${tab === 'compare' ? 'on' : ''}">Compare</button>
         <button role="tab" data-tab="consensus" aria-selected="${tab === 'consensus'}" class="${tab === 'consensus' ? 'on' : ''}">Crowd picks</button>
         <button role="tab" data-tab="winners" aria-selected="${tab === 'winners'}" class="${tab === 'winners' ? 'on' : ''}">Winners</button>
       </div>
-      ${meUnsent ? '<p class="tiny" style="margin:-6px 0 14px;color:var(--red);font-weight:600">Your ballot shows here from this device, but it is not in the pool yet. Send Spencer your link from <a href="./">your ballot card</a>.</p>' : publishedCount === 0 ? '<p class="tiny muted" style="margin:-6px 0 14px">Ballots appear here once Spencer adds them to the pool from the links you send him.</p>' : ''}
+      ${!poolOk ? '<p class="tiny" style="margin:-6px 0 14px;color:var(--red);font-weight:600">Couldn’t reach the live pool just now, so this may be missing recent ballots. Pull to refresh in a moment.</p>' : ''}
+      ${meUnsent ? '<p class="tiny" style="margin:-6px 0 14px;color:var(--red);font-weight:600">Your ballot shows here from this device but isn’t in the pool yet. Open <a href="./">your ballot card</a> to retry.</p>' : ''}
       <div id="panel"></div>
       <details class="add"><summary>Add ballot links to this view</summary>
         <p class="small muted" style="margin:10px 0 8px">Paste one or more ballot links. They are kept on this device only; the official pool is whatever the commissioner publishes.</p>
@@ -138,8 +143,14 @@
     const cb = app.querySelector('#clearbtn'); if (cb) cb.addEventListener('click', () => { G.lsDel(G.KEYS.extra); boot(); });
     const panel = app.querySelector('#panel');
     if (tab === 'standings') panel.innerHTML = standings(rows);
+    else if (tab === 'compare') panel.innerHTML = compareView();
     else if (tab === 'consensus') panel.innerHTML = consensusView();
     else panel.innerHTML = winnersView();
+    const selA = panel.querySelector('#ca'), selB = panel.querySelector('#cb');
+    if (selA) selA.addEventListener('change', () => { cmpA = +selA.value; if (cmpB === cmpA) cmpB = null; render(); });
+    if (selB) selB.addEventListener('change', () => { cmpB = +selB.value; render(); });
+    panel.querySelectorAll('[data-cmp]').forEach(b => b.addEventListener('click', () => { cmpB = +b.dataset.cmp; render(); window.scrollTo({ top: panel.offsetTop - 80, behavior: 'smooth' }); }));
+    panel.querySelectorAll('[data-cmpme]').forEach(b => b.addEventListener('click', () => { cmpA = +b.dataset.cmpme; cmpB = null; tab = 'compare'; render(); }));
     panel.querySelectorAll('button.name').forEach(b => b.addEventListener('click', () => { openRow = openRow === b.dataset.i ? null : b.dataset.i; render(); }));
     panel.querySelectorAll('[data-detail]').forEach(el => el.addEventListener('click', () => openDetail(+el.dataset.detail)));
   }
@@ -152,13 +163,27 @@
       const aig = b.picks.aiguille == null ? '—' : G.watchLabel(b.picks.aiguille);
       const open = openRow === String(i);
       const nameCell = `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? (meUnsent ? ' <span class="pill warn">you · not sent yet</span>' : ' <span class="pill gray">you</span>') : ''}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
-      return `<tr class="${isMe ? 'me' : ''} ${open ? 'open' : ''}"><td class="rank ${has && r.rank === 1 ? 'gold' : ''}">${has ? r.rank : ''}</td><td>${nameCell}</td><td class="num pts">${has ? r.pts : '<span class="muted" style="font-weight:400">—</span>'}</td><td class="num small muted">${has ? r.correct + '/' + r.announced : esc(G.fmtDate(b.ts))}</td></tr>${open ? `<tr class="exp"><td colspan="4">${picksGrid(r)}</td></tr>` : ''}`;
+      return `<tr class="${isMe ? 'me' : ''} ${open ? 'open' : ''}"><td class="rank ${has && r.rank === 1 ? 'gold' : ''}">${has ? r.rank : ''}</td><td>${nameCell}</td><td class="num pts">${has ? r.pts : '<span class="muted" style="font-weight:400">—</span>'}</td><td class="num small muted">${has ? r.correct + '/' + r.announced : esc(G.fmtDate(b.ts))}</td></tr>${open ? `<tr class="exp"><td colspan="4">${picksGrid(r)}<div style="margin-top:10px"><button class="btn sm ghost" data-cmpme="${ballots.indexOf(b)}">Compare ${esc(b.name)} with others</button></div></td></tr>` : ''}`;
     }).join('');
     const lateNote = late.length ? `<p class="small muted" style="margin-top:12px">${late.length} ${late.length === 1 ? 'ballot' : 'ballots'} arrived after the lock and ${late.length === 1 ? 'is' : 'are'} not counted: ${esc(late.map(b => b.name).join(', '))}.</p>` : '';
     return `<table class="tbl"><thead><tr><th></th><th>Name</th><th class="num">Pts</th><th class="num">${has ? 'Called' : 'Submitted'}</th></tr></thead><tbody>${html}</tbody></table><p class="tiny muted" style="margin-top:10px">Tap a name to see every pick.</p>${lateNote}`;
   }
   function picksGrid(r) {
     return `<div class="picksgrid">${r.detail.map(d => { const w = d.pick == null ? null : D.watches[d.pick]; const cls = d.state === 'hit' ? 'hit' : d.state === 'miss' ? 'miss' : ''; return `<div class="pk ${cls}" ${w ? `data-detail="${w.id}" role="button" tabindex="0"` : ''}><div class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}${d.state === 'hit' ? '<span class="st">✓ ' + d.prize.pts + 'pt</span>' : d.state === 'miss' ? '<span class="st">✗</span>' : ''}</div><i>${esc(d.prize.name)}</i>${w ? `<b>${esc(w.brand)}</b>${esc(w.name)}` : '<b class="muted">no pick</b>'}</div>`; }).join('')}</div>`;
+  }
+  function compareView() {
+    if (ballots.length < 2) return '<div class="empty">Compare needs at least two ballots in the pool.</div>';
+    if (cmpA == null || !ballots[cmpA]) { const mi = me ? ballots.findIndex(b => b.code === me.code) : -1; cmpA = mi >= 0 ? mi : 0; }
+    if (cmpB == null || !ballots[cmpB] || cmpB === cmpA) { let best = -1, bi = -1; ballots.forEach((b, i) => { if (i === cmpA) return; const c = G.compareBallots(ballots[cmpA], b); if (c.same > best) { best = c.same; bi = i; } }); cmpB = bi >= 0 ? bi : (cmpA === 0 ? 1 : 0); }
+    const A = ballots[cmpA], B = ballots[cmpB]; const c = G.compareBallots(A, B);
+    const sel = (id, cur) => `<select class="sel" id="${id}" aria-label="${id === 'ca' ? 'First' : 'Second'} ballot">${ballots.map((b, i) => `<option value="${i}" ${i === cur ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>`;
+    const cell = (id, win) => { if (id == null) return '<span class="muted">—</span>'; const w = D.watches[id]; const hit = win !== undefined && win === id; return `<span class="cpick ${hit ? 'hit' : ''}" data-detail="${id}" role="button" tabindex="0"><span class="pic"><img src="${G.thumb(id)}" alt="" loading="lazy"></span><span><b>${esc(w.brand)}</b><span>${esc(w.name)}</span>${hit ? '<i>✓ winner</i>' : ''}</span></span>`; };
+    const rows = c.rows.map(r => { const win = Object.prototype.hasOwnProperty.call(results, r.prize.key) ? results[r.prize.key] : undefined; return `<tr class="${r.same ? 'same' : r.both ? 'diff' : ''}"><td><span class="plabel">${esc(r.prize.name)}</span><div class="tiny ${r.same ? 'agree' : 'muted'}">${r.same ? 'Agree' : r.both ? 'Differ' : ''}</div></td><td>${cell(r.a, win)}</td><td>${cell(r.b, win)}</td></tr>`; }).join('');
+    const closest = ballots.map((b, i) => ({ i, name: b.name, c: G.compareBallots(A, b) })).filter(x => x.i !== cmpA).sort((x, y) => y.c.same - x.c.same || x.name.localeCompare(y.name));
+    return `<div class="cmpsel">${sel('ca', cmpA)}<span class="vs">vs</span>${sel('cb', cmpB)}</div>
+      <div class="cmpsum"><b>${c.same} of ${c.n}</b> picks in common · <b>${c.pct}%</b> overlap${c.rows.some(r => r.same && r.prize.key === 'aiguille') ? ' · same Aiguille d’Or' : ''}</div>
+      <div class="tblwrap"><table class="tbl cmptbl"><thead><tr><th>Prize</th><th>${esc(A.name)}</th><th>${esc(B.name)}</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="sechead">Closest to ${esc(A.name)}</div><div class="rows">${closest.map(x => `<button type="button" class="row cmprow" data-cmp="${x.i}"><span class="t"><b>${esc(x.name)}</b><span>${x.c.same} of ${x.c.n} in common</span></span><span class="mark">${x.c.pct}%</span></button>`).join('')}</div>`;
   }
   function consensusView() {
     if (!ballots.length) return '<div class="empty">Crowd picks appear once ballots are in.</div>';

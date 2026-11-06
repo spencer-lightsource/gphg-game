@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;700;800&display=swap">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=20261106b">
 <style>
   body.noscroll { overflow: hidden; }
   .loading { padding: 60px 0; text-align: center; color: var(--muted); }
@@ -61,7 +61,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/core.js"></script>
+<script src="assets/core.js?v=20261106b"></script>
 <script>
 (function () {
   'use strict';
@@ -83,6 +83,7 @@
     if (!S.name) S.name = G.lsGet(G.KEYS.name, '') || '';
     if (history.state && history.state.sheet) history.replaceState(null, '');   // a sheet was open when the page was last unloaded
     document.getElementById('nav-mine').addEventListener('click', () => go('card'));
+    if (S.submitted) syncPool();
     window.addEventListener('hashchange', route);
     window.addEventListener('popstate', () => {
       if (sheetDepth > 0) { closeSheet(true); return; }
@@ -133,6 +134,33 @@
   }
 
   function picksMade() { return S.picks.cats.filter(x => x != null).length + (S.picks.aiguille != null ? 1 : 0); }
+
+  /* ---------- the pool: every locked ballot is posted to the shared pool; retried on every visit until it lands ---------- */
+  let poolState = 'idle', poolInfo = null;
+  function pooledNow() { const p = G.lsGet(G.KEYS.pooled); return p && S.submitted && p.code === S.submitted.code ? p : null; }
+  async function syncPool(force) {
+    if (!S.submitted) return;
+    const p = pooledNow();
+    if (p && !force) { poolState = 'pooled'; poolInfo = p; paintPool(); return; }
+    poolState = 'pending'; paintPool();
+    try {
+      const r = await G.poolSubmit(S.submitted);
+      poolInfo = { code: S.submitted.code, received: r.received || Date.now() };
+      G.lsSet(G.KEYS.pooled, poolInfo); poolState = 'pooled';
+    } catch (e) { poolState = 'failed'; poolInfo = { error: e && e.message }; }
+    paintPool();
+  }
+  function poolHTML() {
+    if (poolState === 'pooled') return `<div class="eyebrow" style="color:var(--good)">✓ In the pool${poolInfo && poolInfo.received ? ' · ' + esc(G.fmtDate(poolInfo.received)) : ''}</div>`;
+    if (poolState === 'failed') return `<div class="eyebrow">Not in the pool yet</div><p class="small" style="margin:6px 0 0">We couldn’t reach the pool just now. <button type="button" class="linkbtn" id="retrypool">Try again</button>, or send Spencer your link below and he’ll add it.</p>`;
+    return `<div class="eyebrow gray">Adding to the pool…</div>`;
+  }
+  function paintPool() {
+    const el = document.getElementById('poolstatus'); if (!el) return;
+    el.innerHTML = poolHTML();
+    const rb = el.querySelector('#retrypool'); if (rb) rb.addEventListener('click', () => syncPool(true));
+    const r = document.getElementById('resumepool'); if (r) r.innerHTML = poolState === 'pooled' ? 'Your picks are locked and in the pool.' : poolState === 'failed' ? 'Your picks are locked on this device but not in the pool yet.' : 'Your picks are locked.';
+  }
   function lockedNotice() { return G.isLocked() ? '<div class="notice red">The ceremony has started: ballots are locked. You can still browse the nominees and see the <a href="board.html">standings</a>.</div>' : ''; }
 
   /* ---------- landing ---------- */
@@ -141,7 +169,7 @@
     const made = picksMade();
     let resume = '';
     if (S.submitted) {
-      resume = `<div class="resume"><div class="eyebrow">Ballot locked on this device</div><p style="margin:6px 0 0">${esc(S.submitted.name)}, your picks are locked. They only count once Spencer has your link${G.isLocked() ? '' : ', and you can still change them until the ceremony starts'}.</p><div class="btns"><button class="btn sm red" data-go="card">Send my link</button>${G.isLocked() ? '' : '<button class="btn sm ghost" data-act="edit">Edit picks</button>'}</div></div>`;
+      resume = `<div class="resume"><div class="eyebrow">${esc(S.submitted.name)}, you’re in</div><p style="margin:6px 0 0"><span id="resumepool">Your picks are locked.</span>${G.isLocked() ? '' : ' You can still change them until the ceremony starts.'}</p><div class="btns"><button class="btn sm red" data-go="card">My ballot</button><a class="btn sm ghost" href="board.html">Everyone’s picks</a>${G.isLocked() ? '' : '<button class="btn sm ghost" data-act="edit">Edit picks</button>'}</div></div>`;
     } else if (made > 0 && S.name) {
       resume = `<div class="resume"><div class="eyebrow">Welcome back</div><p style="margin:6px 0 0">${esc(S.name)}, you've made ${made} of 15 required picks.</p><div class="btns"><button class="btn sm" data-act="resume">Resume</button><button class="btn sm ghost" data-act="reset">Start over</button></div></div>`;
     }
@@ -169,7 +197,7 @@
           <div class="steps">
             <div><span class="n">1</span><div><b>Pick a winner in all 14 categories</b><span>Six nominees each. Tap a watch to pick it, tap ⓘ to see photos, specs, price and the brand’s pitch.</span></div></div>
             <div><span class="n">2</span><div><b>Name the Aiguille d’Or</b><span>Best in show, worth 3 points. Then an optional bonus round for the jury’s special prizes.</span></div></div>
-            <div><span class="n">3</span><div><b>Lock it in and send the link</b><span>Your ballot becomes a link. Text it to Spencer so it counts, then compare everyone’s picks on the standings page and see who called it after the ceremony.</span></div></div>
+            <div><span class="n">3</span><div><b>Lock it in and you’re in</b><span>Your ballot goes straight into the pool. Compare picks with everyone on the standings page, then see who called it after the ceremony.</span></div></div>
           </div>
           <div class="sechead">Scoring</div>
           <p class="scoring"><b>1 point</b> per category winner (14). <b>3 points</b> for the Aiguille d’Or. <b>1 bonus point</b> each for Audacity, Horological Revelation and Chronometry, if the jury awards them. Ties go to whoever called more prizes, then to the earlier ballot.</p>
@@ -364,7 +392,9 @@
     S.submitted = check;
     G.lsSet(G.KEYS.ballot, { name: check.name, ts: check.ts, code });
     G.lsDel(G.KEYS.draft);
+    poolState = 'pending';
     go('card');
+    syncPool();
   }
 
   /* ---------- ballot card ---------- */
@@ -382,8 +412,8 @@
         <div class="meta">${aig ? 'Aiguille d’Or: ' + esc(aig.brand + ' ' + aig.name) : 'No Aiguille d’Or pick'}</div>
       </div></section>
       ${own ? `<div class="share">
-        <div class="eyebrow">Step 3 · make it count</div>
-        <h2 class="title" style="margin-top:4px"><b>Send your ballot link to Spencer</b><span>It is not in the pool until he has it</span></h2>
+        <div id="poolstatus">${poolHTML()}</div>
+        <h2 class="title" style="margin-top:6px"><b>Share your ballot</b><span>Compare picks with the group</span></h2>
         <div class="btns">
           <button class="btn red" id="share">Share</button>
           <button class="btn" id="copy">Copy link</button>
@@ -391,12 +421,12 @@
           <a class="btn ghost" href="board.html">Everyone’s picks</a>
         </div>
         <div class="linkbox"><code id="url">${esc(url)}</code></div>
-        <p class="small muted" style="margin:12px 0 0">${G.isLocked() ? 'The ceremony has started, so picks are final.' : 'Changed your mind? <button class="linkbtn" data-act="edit">Edit picks</button> until the ceremony starts, then resend the link.'}</p>
+        <p class="small muted" style="margin:12px 0 0">${G.isLocked() ? 'The ceremony has started, so picks are final.' : 'Changed your mind? <button class="linkbtn" data-act="edit">Edit picks</button> until the ceremony starts; the pool keeps your latest ballot.'}</p>
       </div>` : `<div class="share">
         <div class="eyebrow">This is ${esc(G.possessive(b.name))} ballot</div>
         <h2 class="title" style="margin-top:4px"><b>Think you can do better?</b><span>Make your own in about five minutes</span></h2>
         <div class="btns"><a class="btn red" href="./" id="mine">Make my ballot</a><a class="btn ghost" href="board.html">Standings</a></div>
-        <p class="small muted" style="margin:12px 0 0">Collecting ballots? Open the <a href="commissioner.html">commissioner’s desk</a> to add this one to the pool.</p>
+        <p class="small muted" style="margin:12px 0 0">Every locked ballot joins the pool automatically. See them all on the <a href="board.html">standings page</a>.</p>
       </div>`}
       <div class="sechead">Grand Prix · Aiguille d’Or<span class="pts">3 pts</span></div>
       ${aig ? `<div class="gp" role="button" tabindex="0" aria-label="Details for ${esc(aig.brand + ' ' + aig.name)}"><div class="pic"><img src="${G.full(aig.id)}" alt=""></div><div><div class="eyebrow">Best in show</div><h3>${esc(aig.brand)}</h3><div class="model">${esc(aig.name)}</div><div class="small muted" style="margin-top:6px">${esc(D.categories[G.catOf(aig.id)].name)} · ${esc(aig.priceLabel)}</div></div></div>` : '<div class="empty">No pick</div>'}
@@ -408,6 +438,7 @@
     const gpEl = app.querySelector('.gp'); if (gpEl && aig) gpEl.addEventListener('click', () => openDetail(aig.id, { pickable: false }));
     app.querySelectorAll('[data-act]').forEach(x => x.addEventListener('click', () => act(x.dataset.act)));
     if (own) {
+      paintPool();
       const text = `${b.name}’s GPHG 2026 ballot${aig ? ' — ' + aig.brand + ' ' + aig.name + ' for the Aiguille d’Or' : ''}`;
       app.querySelector('#share').addEventListener('click', async () => {
         if (navigator.share) { try { await navigator.share({ title: 'GPHG 2026 ballot', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
