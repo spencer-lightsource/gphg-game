@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>GPHG 2026 Ballot — Call the winners</title>
+<meta name="description" content="Predict the winners of the 2026 Grand Prix d'Horlogerie de Genève. 84 nominees, 14 categories, one Aiguille d'Or. Lock your picks before the jury does.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="GPHG 2026 Ballot">
+<meta property="og:title" content="GPHG 2026 Ballot — Call the winners">
+<meta property="og:description" content="84 nominees. 14 categories. One Aiguille d'Or. Pick the winners before the jury does on Saturday 7 November.">
+<meta property="og:url" content="https://spencer-lightsource.github.io/gphg-game/">
+<meta property="og:image" content="https://spencer-lightsource.github.io/gphg-game/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="GPHG 2026 Ballot — Call the winners">
+<meta name="twitter:description" content="84 nominees. 14 categories. One Aiguille d'Or. Pick the winners before the jury does.">
+<meta name="twitter:image" content="https://spencer-lightsource.github.io/gphg-game/assets/og.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23e3001b'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='%23fff' stroke-width='5'/%3E%3Cpath d='M32 20v13l9 6' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  body.noscroll { overflow: hidden; }
+  .loading { padding: 60px 0; text-align: center; color: var(--muted); }
+  .resume { border: 1px solid var(--ink); padding: 16px 18px; margin: 18px 0 0; }
+  .resume .btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .scoring { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+  .scoring b { color: var(--ink); }
+  .bonusrow { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; border: 1px solid var(--ink); padding: 14px; margin-bottom: 12px; }
+  .bonusrow .sel { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; margin-top: 10px; }
+  .bonusrow .sel .pic { width: 56px; height: 56px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; }
+  .bonusrow .sel img { width: 100%; height: 100%; object-fit: contain; }
+  .bonusrow .sel b { display: block; font-size: 13px; text-transform: uppercase; }
+  .bonusrow .sel span { display: block; font-size: 13px; color: var(--muted); }
+  .bonusrow .side { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+  .bonusrow h3 { margin: 0; font-size: 16px; text-transform: uppercase; }
+  .bonusrow p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .kbd { display: inline-block; border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; font: 600 11px/18px var(--font); color: var(--muted); }
+  @media (max-width: 720px) { .hint .kbdhint { display: none; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap in">
+    <a class="wordmark" href="./" aria-label="GPHG 2026 Ballot home"><b>GPHG</b><span>2026</span><small>Ballot</small></a>
+    <nav class="topnav">
+      <button type="button" id="nav-mine" class="hidden">My ballot</button>
+      <a href="board.html">Standings</a>
+    </nav>
+  </div>
+  <div class="progress" aria-hidden="true"><i id="prog"></i></div>
+</header>
+
+<main id="app" class="wrap"><div class="loading">Loading the 84 nominees…</div></main>
+
+<footer><div class="wrap">Nominee details and photographs are from <a href="https://www.gphg.org/en/gphg-2026/nominated-timepieces" target="_blank" rel="noopener">gphg.org</a>, © Fondation du Grand Prix d'Horlogerie de Genève. This is a friends' prediction pool and is not affiliated with the GPHG.</div></footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="assets/core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const G = window.GPHG, esc = G.esc;
+  let D = null;
+  const STEPS = Array.from({ length: 14 }, (_, i) => 'cat-' + i).concat(['aiguille', 'bonus', 'review']);
+  const S = { name: '', picks: G.emptyPicks(), step: null, submitted: null, viewing: null, lastStep: null };
+  const app = document.getElementById('app');
+  let sheetDepth = 0;
+
+  /* ---------- boot & routing ---------- */
+  async function boot() {
+    try { D = await G.loadData(); } catch (e) { app.innerHTML = '<div class="notice red">Could not load the nominee data. ' + esc(e.message) + '</div>'; return; }
+    const sub = G.lsGet(G.KEYS.ballot);
+    if (sub && sub.code) { const b = G.decodeBallot(sub.code); if (b) S.submitted = b; }
+    const draft = G.lsGet(G.KEYS.draft);
+    if (draft) { S.name = draft.name || ''; S.picks = Object.assign(G.emptyPicks(), draft.picks || {}); S.lastStep = draft.step || null; }
+    if (!S.name) S.name = G.lsGet(G.KEYS.name, '') || '';
+    document.getElementById('nav-mine').addEventListener('click', () => go('card'));
+    window.addEventListener('hashchange', route);
+    window.addEventListener('popstate', () => {
+      if (sheetDepth > 0) { closeSheet(true); return; }
+      if (pendingBack) { pendingBack = false; const s = pendingNav; pendingNav = null; if (s) go(s); }
+    });
+    document.addEventListener('keydown', onKey);
+    route();
+  }
+
+  function route() {
+    const h = location.hash || '';
+    const b = (location.search || '').match(/[?&]b=([A-Za-z0-9_-]+)/) || h.match(/^#b=([A-Za-z0-9_-]+)/);
+    if (b && !/^#s=/.test(h)) { const ballot = G.decodeBallot(b[1]); if (ballot) { S.viewing = ballot; return render('view'); } return render('badlink'); }
+    const s = h.match(/^#s=([a-z0-9-]+)/);
+    if (s && (STEPS.includes(s[1]) || s[1] === 'landing' || s[1] === 'card')) return render(s[1]);
+    if (S.submitted) return render('card');
+    render('landing');
+  }
+  let pendingBack = false, pendingNav = null;
+  function go(step) {
+    if (pendingBack) { pendingNav = step; return; }   // a sheet just closed via history.back(); navigate once that lands
+    if (location.hash === '#s=' + step) render(step); else location.hash = '#s=' + step;
+  }
+  function saveDraft() { G.lsSet(G.KEYS.draft, { name: S.name, picks: S.picks, step: S.step }); if (S.name) G.lsSet(G.KEYS.name, S.name); }
+
+  function render(step) {
+    if (sheetDepth > 0) closeSheet(false);
+    S.step = step;
+    document.getElementById('nav-mine').classList.toggle('hidden', !S.submitted || step === 'card');
+    const idx = STEPS.indexOf(step);
+    document.getElementById('prog').style.width = idx < 0 ? (step === 'card' || step === 'view' ? '100%' : '0') : Math.round((idx + 1) / STEPS.length * 100) + '%';
+    window.scrollTo(0, 0);
+    if (step === 'landing') renderLanding();
+    else if (step.startsWith('cat-')) renderCat(+step.slice(4));
+    else if (step === 'aiguille') renderAiguille();
+    else if (step === 'bonus') renderBonus();
+    else if (step === 'review') renderReview();
+    else if (step === 'card') renderCard(S.submitted, 'own');
+    else if (step === 'view') renderCard(S.viewing, 'view');
+    else if (step === 'badlink') { app.innerHTML = '<div class="notice red" style="margin-top:24px">That ballot link is damaged or incomplete. Ask for it to be sent again.</div><p><a href="./">Make your own ballot</a></p>'; }
+    if (STEPS.includes(step)) saveDraft();
+  }
+
+  function picksMade() { return S.picks.cats.filter(x => x != null).length + (S.picks.aiguille != null ? 1 : 0); }
+  function lockedNotice() { return G.isLocked() ? '<div class="notice red">The ceremony has started: ballots are locked. You can still browse the nominees and see the <a href="board.html">standings</a>.</div>' : ''; }
+
+  /* ---------- landing ---------- */
+  function renderLanding() {
+    const strip = D.watches.filter((w, i) => i % 4 === 1).map(w => `<div class="pic"><img src="${G.thumb(w.id)}" alt="${esc(w.brand + ' ' + w.name)}" loading="lazy"></div>`).join('');
+    const made = picksMade();
+    let resume = '';
+    if (S.submitted) {
+      resume = `<div class="resume"><div class="eyebrow">Ballot received</div><p style="margin:6px 0 0">${esc(S.submitted.name)}, your ballot is in${G.isLocked() ? '' : '. You can still change it until the ceremony starts'}.</p><div class="btns"><button class="btn sm" data-go="card">View my ballot</button>${G.isLocked() ? '' : '<button class="btn sm ghost" data-act="edit">Edit picks</button>'}</div></div>`;
+    } else if (made > 0 && S.name) {
+      resume = `<div class="resume"><div class="eyebrow">Welcome back</div><p style="margin:6px 0 0">${esc(S.name)}, you've made ${made} of 15 required picks.</p><div class="btns"><button class="btn sm" data-act="resume">Resume</button><button class="btn sm ghost" data-act="reset">Start over</button></div></div>`;
+    }
+    app.innerHTML = `
+      <section class="hero" style="margin:0 -20px"><div class="wrap">
+        <div class="eyebrow">Grand Prix d’Horlogerie de Genève · 2026 Edition</div>
+        <h1>Call the<br>winners.</h1>
+        <p>84 nominees. 14 categories. One Aiguille d’Or. The jury announces its verdicts in Geneva on Saturday 7 November. Lock in your picks before they do, then find out who really knows watches.</p>
+        <div class="meta"><span>Ballots lock ${esc(G.fmtLock())}</span><span>Max ${G.maxPoints()} points</span><span>About five minutes</span></div>
+      </div></section>
+      <div class="strip" aria-hidden="true">${strip}</div>
+      ${lockedNotice()}
+      <section class="start">
+        <div>
+          <h2 class="title big"><b>Enter the pool</b><span>One ballot per person</span></h2>
+          ${resume}
+          <form id="startform" class="${S.submitted ? 'hidden' : ''}">
+            <div class="field"><label for="name">Your name</label><input class="input" id="name" type="text" maxlength="40" autocomplete="name" placeholder="So the scorecard is yours" value="${esc(S.name)}" required></div>
+            <button class="btn big red" type="submit" ${G.isLocked() ? 'disabled' : ''}>Start the ballot →</button>
+          </form>
+          ${S.submitted ? '<p class="small muted" style="margin-top:14px">Want a second ballot for someone else on this phone? <button class="linkbtn" data-act="reset">Start a new one</button>.</p>' : ''}
+        </div>
+        <div>
+          <div class="sechead" style="margin-top:0">How it works</div>
+          <div class="steps">
+            <div><span class="n">1</span><div><b>Pick a winner in all 14 categories</b><span>Six nominees each. Tap a watch to pick it, tap ⓘ to see photos, specs, price and the brand’s pitch.</span></div></div>
+            <div><span class="n">2</span><div><b>Name the Aiguille d’Or</b><span>Best in show, worth 3 points. Then an optional bonus round for the jury’s special prizes.</span></div></div>
+            <div><span class="n">3</span><div><b>Lock it in and send the link</b><span>Your ballot becomes a link. Text it to Spencer so it counts, then watch the standings after the ceremony.</span></div></div>
+          </div>
+          <div class="sechead">Scoring</div>
+          <p class="scoring"><b>1 point</b> per category winner (14). <b>3 points</b> for the Aiguille d’Or. <b>1 bonus point</b> each for Audacity, Horological Revelation and Chronometry, if the jury awards them. Ties go to whoever called more prizes, then to the earlier ballot.</p>
+        </div>
+      </section>`;
+    app.querySelector('#startform').addEventListener('submit', e => {
+      e.preventDefault();
+      const n = app.querySelector('#name').value.trim();
+      if (!n) { app.querySelector('#name').focus(); return; }
+      S.name = n; saveDraft();
+      go(firstIncomplete());
+    });
+    app.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+    app.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
+  }
+  function firstIncomplete() { const i = S.picks.cats.findIndex(x => x == null); if (i >= 0) return 'cat-' + i; if (S.picks.aiguille == null) return 'aiguille'; return 'review'; }
+  function act(a) {
+    if (a === 'resume') go(firstIncomplete());
+    else if (a === 'reset') { if (!confirm('Start a fresh ballot on this device? The saved one stays valid wherever its link was sent.')) return; S.name = ''; S.picks = G.emptyPicks(); S.submitted = null; G.lsDel(G.KEYS.draft); G.lsDel(G.KEYS.ballot); go('landing'); }
+    else if (a === 'edit') { if (!S.submitted) return; S.name = S.submitted.name; S.picks = JSON.parse(JSON.stringify(S.submitted.picks)); saveDraft(); go('review'); }
+  }
+
+  /* ---------- category round ---------- */
+  function renderCat(i) {
+    const c = D.categories[i];
+    const ws = G.watchesInCat(i);
+    app.innerHTML = `
+      ${lockedNotice()}
+      <div class="roundhead">
+        <div><div class="eyebrow">Category ${i + 1} of 14</div><h1 class="title big"><b>${esc(c.name)}</b><span>Who wins?</span></h1></div>
+        <div class="ptsbadge">${c.pts} pt</div>
+        <p class="blurb">${esc(c.blurb)}</p>
+      </div>
+      <div class="grid" id="grid">${ws.map((w, k) => card(w, k)).join('')}</div>
+      <div class="actions">
+        <button class="btn ghost" id="back">← Back</button>
+        <span class="hint">Tap a watch to pick it · ⓘ for details<span class="kbdhint"> · keys <span class="kbd">1</span>–<span class="kbd">6</span></span></span>
+        <button class="btn" id="next" ${S.picks.cats[i] == null ? 'disabled' : ''}>Next →</button>
+      </div>`;
+    const grid = app.querySelector('#grid');
+    grid.addEventListener('click', e => {
+      const info = e.target.closest('.info'); const cardEl = e.target.closest('.card');
+      if (!cardEl) return;
+      const id = +cardEl.dataset.id;
+      if (info) { e.preventDefault(); openDetail(id, { pickable: true, onPick: () => { pickCat(i, id); } }); return; }
+      pickCat(i, id);
+    });
+    app.querySelector('#back').addEventListener('click', () => go(i === 0 ? 'landing' : 'cat-' + (i - 1)));
+    app.querySelector('#next').addEventListener('click', () => go(i === 13 ? 'aiguille' : 'cat-' + (i + 1)));
+    // warm the next round's thumbnails
+    if (i < 13) G.watchesInCat(i + 1).forEach(w => { const im = new Image(); im.src = G.thumb(w.id); });
+  }
+  function card(w, k) {
+    const on = S.picks.cats[G.catOf(w.id)] === w.id;
+    return `<button type="button" class="card ${on ? 'on' : ''}" data-id="${w.id}" aria-pressed="${on}">
+      <div class="pic"><span class="tick">Your pick</span><span class="info" role="button" aria-label="Details for ${esc(w.brand + ' ' + w.name)}">i</span><img src="${G.thumb(w.id)}" alt="" ${k > 1 ? 'loading="lazy"' : ''}></div>
+      <div class="brand">${esc(w.brand)}</div><div class="model">${esc(w.name)}</div><div class="price">${esc(w.priceLabel)}</div>
+    </button>`;
+  }
+  function pickCat(i, id) {
+    S.picks.cats[i] = id; saveDraft();
+    app.querySelectorAll('.card').forEach(el => { const on = +el.dataset.id === id; el.classList.toggle('on', on); el.setAttribute('aria-pressed', on); });
+    const n = app.querySelector('#next'); if (n) n.disabled = false;
+  }
+
+  /* ---------- Aiguille d'Or ---------- */
+  function renderAiguille() {
+    const sp = D.specials[0];
+    const winners = S.picks.cats.map((id, i) => id == null ? null : { id, cat: D.categories[i].name }).filter(Boolean);
+    app.innerHTML = `
+      ${lockedNotice()}
+      <div class="roundhead">
+        <div><div class="eyebrow">Grand Prix · best in show</div><h1 class="title big"><b>Aiguille d’Or</b><span>The one watch above all</span></h1></div>
+        <div class="ptsbadge red">${sp.pts} pts</div>
+        <p class="blurb">${esc(sp.blurb)} Pick from your category winners below, or search every nominee.</p>
+      </div>
+      <div class="search"><span aria-hidden="true">⌕</span><input id="q" type="search" placeholder="Search all 84 nominees by brand or model" autocomplete="off"></div>
+      <div id="list"></div>
+      <div class="actions">
+        <button class="btn ghost" id="back">← Back</button>
+        <span class="hint" id="hint"></span>
+        <button class="btn" id="next" ${S.picks.aiguille == null ? 'disabled' : ''}>Next →</button>
+      </div>`;
+    const list = app.querySelector('#list'), q = app.querySelector('#q');
+    const draw = () => {
+      const term = q.value.trim().toLowerCase();
+      let html = '';
+      if (term) {
+        const hits = D.watches.filter(w => (w.brand + ' ' + w.name + ' ' + D.categories[G.catOf(w.id)].name).toLowerCase().includes(term));
+        html = `<div class="sechead">${hits.length} ${hits.length === 1 ? 'match' : 'matches'}</div><div class="rows">${hits.map(w => row(w, D.categories[G.catOf(w.id)].name, S.picks.aiguille === w.id)).join('') || '<div class="empty">No nominee matches that.</div>'}</div>`;
+      } else {
+        html = `<div class="sechead">Your category winners<span class="pts">${winners.length} of 14</span></div><div class="rows">${winners.map(x => row(D.watches[x.id], x.cat, S.picks.aiguille === x.id)).join('') || '<div class="empty">Pick your category winners first, or search above.</div>'}</div>`;
+        if (S.picks.aiguille != null && !winners.some(x => x.id === S.picks.aiguille)) html = `<div class="sechead">Your pick</div><div class="rows">${row(D.watches[S.picks.aiguille], D.categories[G.catOf(S.picks.aiguille)].name, true)}</div>` + html;
+      }
+      list.innerHTML = html;
+      app.querySelector('#hint').textContent = S.picks.aiguille == null ? 'Choose one nominee' : 'Your pick: ' + G.watchLabel(S.picks.aiguille);
+    };
+    q.addEventListener('input', draw);
+    list.addEventListener('click', e => {
+      const r = e.target.closest('.row'); if (!r) return;
+      const id = +r.dataset.id;
+      if (e.target.closest('.peek')) { openDetail(id, { pickable: true, pickLabel: 'Pick for Aiguille d’Or', onPick: () => { S.picks.aiguille = id; saveDraft(); draw(); app.querySelector('#next').disabled = false; } }); return; }
+      S.picks.aiguille = id; saveDraft(); draw(); app.querySelector('#next').disabled = false;
+    });
+    app.querySelector('#back').addEventListener('click', () => go('cat-13'));
+    app.querySelector('#next').addEventListener('click', () => go('bonus'));
+    draw();
+  }
+  function row(w, tag, on) {
+    return `<button type="button" class="row ${on ? 'on' : ''}" data-id="${w.id}"><span class="pic"><img src="${G.thumb(w.id)}" alt="" loading="lazy"></span><span class="t"><b>${esc(w.brand)}</b><span>${esc(w.name)}</span><i>${esc(tag)} · ${esc(w.priceLabel)}</i></span><span class="mark">${on ? 'Your pick' : '<span class="linkbtn peek">Details</span>'}</span></button>`;
+  }
+
+  /* ---------- bonus specials ---------- */
+  function renderBonus() {
+    const sps = D.specials.slice(1);
+    app.innerHTML = `
+      ${lockedNotice()}
+      <div class="roundhead">
+        <div><div class="eyebrow">Bonus round · optional</div><h1 class="title big"><b>Special prizes</b><span>Only if the jury awards them</span></h1></div>
+        <div class="ptsbadge">1 pt each</div>
+        <p class="blurb">The jury hands these out only when something deserves it. Call one right for a bonus point. Guess wrong, or skip, and nothing is lost.</p>
+      </div>
+      <div id="bonus">${sps.map(bonusRow).join('')}</div>
+      <div class="actions">
+        <button class="btn ghost" id="back">← Back</button>
+        <span class="hint">You can leave any of these blank</span>
+        <button class="btn" id="next">Review ballot →</button>
+      </div>`;
+    const host = app.querySelector('#bonus');
+    host.addEventListener('click', e => {
+      const b = e.target.closest('[data-pick]'); const c = e.target.closest('[data-clear]');
+      if (b) { const key = b.dataset.pick; openPicker({ title: D.specials.find(s => s.id === key).name, current: S.picks[key], onPick: id => { S.picks[key] = id; saveDraft(); host.innerHTML = sps.map(bonusRow).join(''); } }); }
+      if (c) { S.picks[c.dataset.clear] = null; saveDraft(); host.innerHTML = sps.map(bonusRow).join(''); }
+    });
+    app.querySelector('#back').addEventListener('click', () => go('aiguille'));
+    app.querySelector('#next').addEventListener('click', () => go('review'));
+  }
+  function bonusRow(sp) {
+    const id = S.picks[sp.id];
+    const w = id == null ? null : D.watches[id];
+    return `<div class="bonusrow"><div><h3>${esc(sp.name)}</h3><p>${esc(sp.blurb)}</p>${w ? `<div class="sel"><span class="pic"><img src="${G.thumb(w.id)}" alt=""></span><span><b>${esc(w.brand)}</b><span>${esc(w.name)}</span></span></div>` : ''}</div>
+      <div class="side"><button class="btn sm ${w ? 'ghost' : ''}" data-pick="${sp.id}">${w ? 'Change' : 'Choose'}</button>${w ? `<button class="btn sm ghost" data-clear="${sp.id}">Clear</button>` : ''}</div></div>`;
+  }
+
+  /* ---------- review & submit ---------- */
+  function renderReview() {
+    const missing = S.picks.cats.filter(x => x == null).length + (S.picks.aiguille == null ? 1 : 0);
+    const rows = D.categories.map((c, i) => reviewRow(c.name, S.picks.cats[i], 'cat-' + i)).join('');
+    const bonus = D.specials.slice(1).map(sp => S.picks[sp.id] == null ? '' : reviewRow(sp.short, S.picks[sp.id], 'bonus')).join('');
+    app.innerHTML = `
+      ${lockedNotice()}
+      <div class="roundhead">
+        <div><div class="eyebrow">Final check</div><h1 class="title big"><b>Review your ballot</b><span>Tap any pick to change it</span></h1></div>
+      </div>
+      ${missing ? `<div class="notice red">${missing} required ${missing === 1 ? 'pick is' : 'picks are'} still blank. Tap a blank row to fill it in.</div>` : ''}
+      <div class="field"><label for="name2">Your name</label><input class="input" id="name2" type="text" maxlength="40" value="${esc(S.name)}" placeholder="Your name" autocomplete="name"></div>
+      <div class="sechead">Grand Prix<span class="pts">3 pts</span></div>
+      ${reviewRow('Aiguille d’Or', S.picks.aiguille, 'aiguille')}
+      <div class="sechead">Categories<span class="pts">1 pt each</span></div>
+      ${rows}
+      <div class="sechead">Bonus prizes<span class="pts">1 pt each</span></div>
+      ${bonus || '<div class="empty" style="margin:8px 0">No bonus picks. <button class="linkbtn" data-go="bonus">Add some</button> or leave it.</div>'}
+      <div class="actions">
+        <button class="btn ghost" id="back">← Back</button>
+        <button class="btn red" id="lock" ${missing || G.isLocked() ? 'disabled' : ''}>Lock it in</button>
+      </div>`;
+    app.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+    app.querySelector('#name2').addEventListener('input', e => { S.name = e.target.value; saveDraft(); });
+    app.querySelector('#back').addEventListener('click', () => go('bonus'));
+    app.querySelector('#lock').addEventListener('click', submit);
+  }
+  function reviewRow(label, id, goTo) {
+    const w = id == null ? null : D.watches[id];
+    return `<button type="button" class="row reviewrow ${w ? '' : 'missing'}" data-go="${goTo}"><span class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}</span><span class="t"><i>${esc(label)}</i>${w ? `<b>${esc(w.brand)}</b><span>${esc(w.name)}</span>` : '<b>No pick yet</b><span>Tap to choose</span>'}</span><span class="mark">${w ? 'Change' : 'Pick'}</span></button>`;
+  }
+  function submit() {
+    const name = (app.querySelector('#name2').value || S.name || '').trim();
+    if (!name) { app.querySelector('#name2').focus(); toast('Add your name first'); return; }
+    if (G.isLocked()) { toast('Ballots are locked'); return; }
+    S.name = name;
+    const ballot = { name, picks: S.picks, ts: Date.now() };
+    const code = G.encodeBallot(ballot);
+    const check = G.decodeBallot(code);
+    if (!check) { toast('Something went wrong encoding your ballot'); return; }
+    S.submitted = check;
+    G.lsSet(G.KEYS.ballot, { name: check.name, ts: check.ts, code });
+    G.lsDel(G.KEYS.draft);
+    go('card');
+  }
+
+  /* ---------- ballot card ---------- */
+  function renderCard(b, mode) {
+    if (!b) return render('landing');
+    const url = G.ballotURL(b.code);
+    const aig = b.picks.aiguille == null ? null : D.watches[b.picks.aiguille];
+    const minis = D.categories.map((c, i) => mini(c.name, b.picks.cats[i])).join('');
+    const bonus = D.specials.slice(1).filter(sp => b.picks[sp.id] != null).map(sp => mini(sp.short, b.picks[sp.id])).join('');
+    const own = mode === 'own';
+    app.innerHTML = `
+      <section class="ballothead" style="margin:0 -20px"><div class="wrap">
+        <div class="eyebrow">GPHG 2026 · ballot ${own ? 'locked' : 'received'} ${esc(G.fmtDate(b.ts))}</div>
+        <h1>${esc(G.possessive(b.name))}<br>ballot</h1>
+        <div class="meta">${aig ? 'Aiguille d’Or: ' + esc(aig.brand + ' ' + aig.name) : 'No Aiguille d’Or pick'}</div>
+      </div></section>
+      ${own ? `<div class="share">
+        <div class="eyebrow">Step 3 · make it count</div>
+        <h2 class="title" style="margin-top:4px"><b>Send your ballot link to Spencer</b><span>It is not in the pool until he has it</span></h2>
+        <div class="btns">
+          <button class="btn red" id="share">Share</button>
+          <button class="btn" id="copy">Copy link</button>
+          <button class="btn ghost" id="dl">Download</button>
+          <a class="btn ghost" href="board.html">Standings</a>
+        </div>
+        <div class="linkbox"><code id="url">${esc(url)}</code></div>
+        <p class="small muted" style="margin:12px 0 0">${G.isLocked() ? 'The ceremony has started, so picks are final.' : 'Changed your mind? <button class="linkbtn" data-act="edit">Edit picks</button> until the ceremony starts, then resend the link.'}</p>
+      </div>` : `<div class="share">
+        <div class="eyebrow">This is ${esc(G.possessive(b.name))} ballot</div>
+        <h2 class="title" style="margin-top:4px"><b>Think you can do better?</b><span>Make your own in about five minutes</span></h2>
+        <div class="btns"><a class="btn red" href="./" id="mine">Make my ballot</a><a class="btn ghost" href="board.html">Standings</a></div>
+        <p class="small muted" style="margin:12px 0 0">Collecting ballots? Open the <a href="commissioner.html">commissioner’s desk</a> to add this one to the pool.</p>
+      </div>`}
+      <div class="sechead">Grand Prix · Aiguille d’Or<span class="pts">3 pts</span></div>
+      ${aig ? `<div class="gp"><div class="pic"><img src="${G.full(aig.id)}" alt=""></div><div><div class="eyebrow">Best in show</div><h3>${esc(aig.brand)}</h3><div class="model">${esc(aig.name)}</div><div class="small muted" style="margin-top:6px">${esc(D.categories[G.catOf(aig.id)].name)} · ${esc(aig.priceLabel)}</div></div></div>` : '<div class="empty">No pick</div>'}
+      <div class="sechead">Category winners<span class="pts">1 pt each</span></div>
+      <div class="minigrid">${minis}</div>
+      ${bonus ? `<div class="sechead">Bonus prizes<span class="pts">1 pt each</span></div><div class="minigrid">${bonus}</div>` : ''}
+      <p class="small muted" style="margin-top:28px">Tap any watch to see its details.</p>`;
+    app.querySelectorAll('.mini[data-id]').forEach(m => m.addEventListener('click', () => openDetail(+m.dataset.id, { pickable: false })));
+    const gpEl = app.querySelector('.gp'); if (gpEl && aig) gpEl.addEventListener('click', () => openDetail(aig.id, { pickable: false }));
+    app.querySelectorAll('[data-act]').forEach(x => x.addEventListener('click', () => act(x.dataset.act)));
+    if (own) {
+      const text = `${b.name}’s GPHG 2026 ballot${aig ? ' — ' + aig.brand + ' ' + aig.name + ' for the Aiguille d’Or' : ''}`;
+      app.querySelector('#share').addEventListener('click', async () => {
+        if (navigator.share) { try { await navigator.share({ title: 'GPHG 2026 ballot', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+        copy(url);
+      });
+      app.querySelector('#copy').addEventListener('click', () => copy(url));
+      app.querySelector('#dl').addEventListener('click', () => download(b, url));
+    }
+  }
+  function mini(label, id) {
+    const w = id == null ? null : D.watches[id];
+    return `<div class="mini" ${w ? `data-id="${w.id}" role="button" tabindex="0"` : ''}><div class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}</div><div class="cat">${esc(label)}</div>${w ? `<div class="brand">${esc(w.brand)}</div><div class="model">${esc(w.name)}</div>` : '<div class="model">No pick</div>'}</div>`;
+  }
+  async function copy(url) {
+    try { await navigator.clipboard.writeText(url); toast('Link copied'); }
+    catch (e) { const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Link copied'); } catch (e2) { toast('Copy the link from the box'); } ta.remove(); }
+  }
+  function download(b, url) {
+    const picks = {};
+    D.categories.forEach((c, i) => picks[c.name] = b.picks.cats[i] == null ? null : G.watchLabel(b.picks.cats[i]));
+    D.specials.forEach(sp => picks[sp.name] = b.picks[sp.id] == null ? null : G.watchLabel(b.picks[sp.id]));
+    const blob = new Blob([JSON.stringify({ name: b.name, submitted: new Date(b.ts).toISOString(), code: b.code, url, picks }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gphg-2026-ballot-' + b.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /* ---------- detail sheet ---------- */
+  function openDetail(id, opts) {
+    const w = D.watches[id]; if (!w) return;
+    const cat = D.categories[G.catOf(id)];
+    const imgs = Array.from({ length: w.imgs }, (_, k) => k);
+    const specs = w.specs.map(([k, v]) => `<div class="spec"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
+    const el = document.createElement('div');
+    el.className = 'sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', w.brand + ' ' + w.name);
+    el.innerHTML = `
+      <div class="bar"><div class="wrap in"><div class="eyebrow ink">${esc(cat.name)} · nominee</div><button class="x" aria-label="Close">×</button></div></div>
+      <div class="wrap">
+        <h1 class="title big" style="margin-top:20px"><b>${esc(w.brand)}</b><span>${esc(w.name)}</span></h1>
+        <div class="detail">
+          <div class="gallery">
+            <div class="main"><img id="mainimg" src="${G.full(id, 0)}" alt="${esc(w.brand + ' ' + w.name)}"></div>
+            ${imgs.length > 1 ? `<div class="thumbs">${imgs.map(k => `<button type="button" class="${k === 0 ? 'on' : ''}" data-k="${k}" aria-label="Photo ${k + 1}"><img src="${G.thumb(id, k)}" alt=""></button>`).join('')}</div>` : ''}
+            <div class="links"><a href="${esc(w.url)}" target="_blank" rel="noopener">GPHG page ↗</a>${w.video ? `<a href="${esc(w.video)}" target="_blank" rel="noopener">Video ↗</a>` : ''}</div>
+          </div>
+          <div>
+            <div class="pricebig">${esc(w.priceLabel)}</div>
+            <div class="small muted">Price incl. VAT · ${esc(cat.name)}</div>
+            <div class="specs">${specs}</div>
+            <div class="sechead" style="margin-top:14px">Description</div>
+            <div class="desc clamp" id="desc">${w.desc || '<p class="muted">No description provided.</p>'}</div>
+            <button type="button" class="linkbtn" id="more" style="margin-top:6px">Read more</button>
+          </div>
+        </div>
+      </div>
+      <div class="actions"><div class="in"><button type="button" class="btn ghost" data-close>Close</button>${opts.pickable ? `<button type="button" class="btn red" data-pick>${esc(opts.pickLabel || 'Pick this watch')}</button>` : ''}</div></div>`;
+    el.querySelectorAll('.thumbs button').forEach(b => b.addEventListener('click', () => { el.querySelector('#mainimg').src = G.full(id, +b.dataset.k); el.querySelectorAll('.thumbs button').forEach(x => x.classList.toggle('on', x === b)); }));
+    const desc = el.querySelector('#desc'), more = el.querySelector('#more');
+    requestAnimationFrame(() => { if (desc.scrollHeight <= 200) { desc.classList.remove('clamp'); more.remove(); } });
+    more.addEventListener('click', () => { const c = desc.classList.toggle('clamp'); more.textContent = c ? 'Read more' : 'Show less'; });
+    el.querySelector('.x').addEventListener('click', () => closeSheet());
+    el.querySelector('[data-close]').addEventListener('click', () => closeSheet());
+    const pk = el.querySelector('[data-pick]'); if (pk) pk.addEventListener('click', () => { closeSheet(); opts.onPick && opts.onPick(); toast('Picked ' + w.brand); });
+    showSheet(el);
+  }
+  function openPicker(opts) {
+    const el = document.createElement('div');
+    el.className = 'sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+    el.innerHTML = `
+      <div class="bar"><div class="wrap in"><div class="eyebrow ink">${esc(opts.title)}</div><button class="x" aria-label="Close">×</button></div></div>
+      <div class="wrap" style="padding-bottom:110px">
+        <div class="search"><span aria-hidden="true">⌕</span><input id="pq" type="search" placeholder="Search all 84 nominees" autocomplete="off"></div>
+        <div id="plist" class="rows"></div>
+      </div>
+      <div class="actions"><div class="in"><button type="button" class="btn ghost" data-close>Cancel</button></div></div>`;
+    const list = el.querySelector('#plist'), q = el.querySelector('#pq');
+    const draw = () => {
+      const term = q.value.trim().toLowerCase();
+      const hits = D.watches.filter(w => !term || (w.brand + ' ' + w.name + ' ' + D.categories[G.catOf(w.id)].name).toLowerCase().includes(term));
+      list.innerHTML = hits.map(w => row(w, D.categories[G.catOf(w.id)].name, opts.current === w.id)).join('') || '<div class="empty">No nominee matches that.</div>';
+    };
+    q.addEventListener('input', draw);
+    list.addEventListener('click', e => {
+      const r = e.target.closest('.row'); if (!r) return; const id = +r.dataset.id;
+      if (e.target.closest('.peek')) { openDetail(id, { pickable: true, onPick: () => { closeSheet(); opts.onPick(id); } }); return; }
+      closeSheet(); opts.onPick(id);
+    });
+    el.querySelector('.x').addEventListener('click', () => closeSheet());
+    el.querySelector('[data-close]').addEventListener('click', () => closeSheet());
+    showSheet(el);
+    setTimeout(() => { try { q.focus({ preventScroll: true }); } catch (e) {} }, 50);
+    draw();
+  }
+  function showSheet(el) {
+    document.body.appendChild(el); document.body.classList.add('noscroll'); sheetDepth++;
+    history.pushState({ sheet: sheetDepth }, '');
+  }
+  function closeSheet(fromPop) {
+    const sheets = document.querySelectorAll('.sheet'); if (!sheets.length) return;
+    sheets[sheets.length - 1].remove(); sheetDepth = Math.max(0, sheetDepth - 1);
+    if (sheetDepth === 0) document.body.classList.remove('noscroll');
+    if (!fromPop && history.state && history.state.sheet) { pendingBack = true; history.back(); setTimeout(() => { if (pendingBack) { pendingBack = false; const s = pendingNav; pendingNav = null; if (s) go(s); } }, 400); }
+  }
+
+  /* ---------- keys & toast ---------- */
+  function onKey(e) {
+    if (e.key === 'Escape' && sheetDepth > 0) { closeSheet(); return; }
+    if (sheetDepth > 0 || !S.step || !S.step.startsWith('cat-')) return;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    const i = +S.step.slice(4);
+    if (/^[1-6]$/.test(e.key)) { pickCat(i, i * 6 + (+e.key - 1)); }
+    else if ((e.key === 'ArrowRight' || e.key === 'Enter') && S.picks.cats[i] != null) { const n = app.querySelector('#next'); n && n.click(); }
+    else if (e.key === 'ArrowLeft') { const b = app.querySelector('#back'); b && b.click(); }
+  }
+  let toastT = null;
+  function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1800); }
+
+  boot();
+})();
+</script>
+</body>
+</html>

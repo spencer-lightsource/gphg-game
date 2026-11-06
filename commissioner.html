@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Commissioner’s desk — GPHG 2026 Ballot</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23000'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='%23fff' stroke-width='5'/%3E%3Cpath d='M32 20v13l9 6' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .loading { padding: 60px 0; text-align: center; color: var(--muted); }
+  .box { border: 1px solid var(--ink); padding: 18px; margin: 16px 0; }
+  .box h2 { margin: 0 0 4px; font-size: 18px; text-transform: uppercase; }
+  .box p { margin: 6px 0 12px; font-size: 13.5px; color: var(--muted); }
+  pre.out { background: var(--soft); border: 1px solid var(--line); padding: 10px; font: 12px/1.4 ui-monospace, Menlo, monospace; overflow: auto; max-height: 240px; white-space: pre; }
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .winsel { display: grid; grid-template-columns: 220px 1fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hair); }
+  @media (max-width: 640px) { .winsel { grid-template-columns: 1fr; } }
+  .winsel label { font-family: var(--cond); font-variation-settings: "wdth" 78; font-stretch: 78%; font-weight: 900; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+  .winsel label small { display: block; font-family: var(--font); font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 12px; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--soft); padding: 1px 4px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap in">
+    <a class="wordmark" href="./" aria-label="GPHG 2026 Ballot home"><b>GPHG</b><span>2026</span><small>Commissioner</small></a>
+    <nav class="topnav"><a href="./">Ballot</a><a href="board.html">Standings</a></nav>
+  </div>
+</header>
+<main id="app" class="wrap"><div class="loading">Loading…</div></main>
+<footer><div class="wrap">Owner tools. Nothing here is published until the JSON files are committed to the site.</div></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="assets/core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const G = window.GPHG, esc = G.esc;
+  const app = document.getElementById('app');
+  let D, published = [], results = {}, pool = new Map();
+
+  async function boot() {
+    D = await G.loadData();
+    const [b, r] = await Promise.all([G.loadJSON('data/ballots.json', []), G.loadJSON('data/results.json', {})]);
+    results = r || {};
+    (Array.isArray(b) ? b : []).forEach(x => { const d = x && x.code ? G.decodeBallot(x.code) : null; if (d) pool.set(d.code, d); });
+    published = [...pool.values()];
+    render();
+  }
+
+  function entries() { return G.mergeBallots([[...pool.values()]]); }
+
+  function render() {
+    const m = entries();
+    const dupes = new Map();
+    for (const b of pool.values()) { const k = b.name.trim().toLowerCase(); dupes.set(k, (dupes.get(k) || 0) + 1); }
+    const rows = [...pool.values()].sort((a, b) => a.ts - b.ts).map(b => {
+      const k = b.name.trim().toLowerCase(); const kept = m.ballots.find(x => x.code === b.code);
+      const st = b.ts > G.LOCK_AT ? '<span class="pill red">late</span>' : kept ? (dupes.get(k) > 1 ? '<span class="pill">latest of ' + dupes.get(k) + '</span>' : '<span class="pill gray">ok</span>') : '<span class="pill gray">superseded</span>';
+      return `<tr><td>${esc(b.name)}</td><td class="small muted">${esc(G.fmtDate(b.ts))}</td><td class="small">${b.picks.aiguille == null ? '—' : esc(G.watchLabel(b.picks.aiguille))}</td><td>${st}</td><td><button class="linkbtn" data-rm="${esc(b.code)}">remove</button></td></tr>`;
+    }).join('');
+    const ballotsJSON = JSON.stringify([...pool.values()].sort((a, b) => a.ts - b.ts).map(b => ({ name: b.name, submitted: new Date(b.ts).toISOString(), code: b.code })), null, 1);
+
+    const catSel = D.categories.map((c, i) => {
+      const cur = Object.prototype.hasOwnProperty.call(results, c.id) ? results[c.id] : undefined;
+      const opts = G.watchesInCat(i).map(w => `<option value="${w.id}" ${cur === w.id ? 'selected' : ''}>${esc(w.brand + ' — ' + w.name)}</option>`).join('');
+      return `<div class="winsel"><label>${esc(c.name)}<small>${c.pts} pt</small></label><select class="sel" data-key="${c.id}"><option value="">Not announced yet</option>${opts}</select></div>`;
+    }).join('');
+    const all = D.watches.map(w => ({ id: w.id, label: w.brand + ' — ' + w.name + ' (' + D.categories[G.catOf(w.id)].name + ')' }));
+    const spSel = D.specials.map(sp => {
+      const cur = Object.prototype.hasOwnProperty.call(results, sp.id) ? results[sp.id] : undefined;
+      return `<div class="winsel"><label>${esc(sp.name)}<small>${sp.pts} pts${sp.optional ? ' · discretionary' : ''}</small></label><select class="sel" data-key="${sp.id}"><option value="">Not announced yet</option>${sp.optional ? `<option value="none" ${cur === null ? 'selected' : ''}>Not awarded this year</option>` : ''}${all.map(o => `<option value="${o.id}" ${cur === o.id ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select></div>`;
+    }).join('');
+
+    app.innerHTML = `
+      <div style="padding-top:26px"><div class="eyebrow">Owner tools</div><h1 class="title big"><b>Commissioner’s desk</b><span>Collect ballots, post winners</span></h1>
+      <p class="small muted" style="max-width:640px">Everything here runs in your browser. To publish, save the JSON into <code>data/ballots.json</code> and <code>data/results.json</code> in the site repo and push (or just hand the JSON to Claude Code). The standings page reads those files.</p></div>
+
+      <div class="box">
+        <h2>1 · Ballots</h2>
+        <p>Paste the links your friends sent you (any mix of links or raw codes, one per line or all at once). ${published.length} already published.</p>
+        <textarea class="ta" id="paste" placeholder="https://spencer-lightsource.github.io/gphg-game/#b=…"></textarea>
+        <div class="btns"><button class="btn sm" id="add">Add to pool</button></div>
+        <table class="tbl" style="margin-top:16px"><thead><tr><th>Name</th><th>Submitted</th><th>Aiguille d’Or</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">No ballots in the pool yet.</td></tr>'}</tbody></table>
+        <p class="small muted">${m.ballots.length} counted · ${m.late.length} late. One ballot per name; the latest before the lock wins.</p>
+        <div class="btns"><button class="btn sm" id="dlb">Download ballots.json</button><button class="btn sm ghost" id="cpb">Copy JSON</button></div>
+        <pre class="out" id="bjson">${esc(ballotsJSON)}</pre>
+      </div>
+
+      <div class="box">
+        <h2>2 · Winners</h2>
+        <p>Set each prize as it is announced. Leave “Not announced yet” for the rest; the standings page scores only what is announced. Discretionary prizes can be marked “Not awarded”.</p>
+        ${spSel}${catSel}
+        <div class="btns"><button class="btn sm" id="dlr">Download results.json</button><button class="btn sm ghost" id="cpr">Copy JSON</button><button class="btn sm ghost" id="clr">Clear all</button></div>
+        <pre class="out" id="rjson">${esc(JSON.stringify(results, null, 1))}</pre>
+      </div>
+
+      <div class="box">
+        <h2>3 · Publish</h2>
+        <p>From the repo folder:</p>
+        <pre class="out">cp ~/Downloads/ballots.json data/ballots.json
+cp ~/Downloads/results.json data/results.json
+git add data && git commit -m "Update pool" && git push</pre>
+        <p>GitHub Pages redeploys in about a minute. Or tell Claude Code: “add these ballots” / “post these winners”.</p>
+      </div>`;
+
+    app.querySelector('#add').addEventListener('click', () => {
+      const codes = (app.querySelector('#paste').value.match(/[A-Za-z0-9_-]{20,}/g) || []).map(G.decodeBallot).filter(Boolean);
+      if (!codes.length) { toast('No valid ballots found'); return; }
+      let n = 0; codes.forEach(b => { if (!pool.has(b.code)) { pool.set(b.code, b); n++; } });
+      toast(n + ' added'); render();
+    });
+    app.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { pool.delete(b.dataset.rm); render(); }));
+    app.querySelector('#dlb').addEventListener('click', () => dl('ballots.json', app.querySelector('#bjson').textContent));
+    app.querySelector('#cpb').addEventListener('click', () => copy(app.querySelector('#bjson').textContent));
+    app.querySelectorAll('select[data-key]').forEach(s => s.addEventListener('change', () => {
+      const k = s.dataset.key, v = s.value;
+      if (v === '') delete results[k]; else if (v === 'none') results[k] = null; else results[k] = +v;
+      app.querySelector('#rjson').textContent = JSON.stringify(results, null, 1);
+    }));
+    app.querySelector('#dlr').addEventListener('click', () => dl('results.json', JSON.stringify(results, null, 1)));
+    app.querySelector('#cpr').addEventListener('click', () => copy(JSON.stringify(results, null, 1)));
+    app.querySelector('#clr').addEventListener('click', () => { if (confirm('Clear all winners?')) { results = {}; render(); } });
+  }
+  function dl(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+  async function copy(t) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch (e) { toast('Select and copy manually'); } }
+  let toastT; function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1800); }
+  boot();
+})();
+</script>
+</body>
+</html>

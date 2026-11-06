@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Standings — GPHG 2026 Ballot</title>
+<meta name="description" content="Who called the 2026 Grand Prix d'Horlogerie de Genève? Standings, crowd consensus and the winners as they are announced.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Standings — GPHG 2026 Ballot">
+<meta property="og:description" content="Who called the 2026 GPHG? Standings, crowd consensus and the winners as they are announced.">
+<meta property="og:url" content="https://spencer-lightsource.github.io/gphg-game/board.html">
+<meta property="og:image" content="https://spencer-lightsource.github.io/gphg-game/assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23e3001b'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='%23fff' stroke-width='5'/%3E%3Cpath d='M32 20v13l9 6' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  body.noscroll { overflow: hidden; }
+  .statgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--ink); margin: 20px 0 0; }
+  .stat { padding: 14px 16px; border-right: 1px solid var(--ink); }
+  .stat:last-child { border-right: 0; }
+  .stat b { display: block; font-family: var(--cond); font-variation-settings: "wdth" 72; font-stretch: 72%; font-weight: 900; font-size: 34px; line-height: 1; }
+  .stat span { display: block; font-family: var(--cond); font-variation-settings: "wdth" 78; font-stretch: 78%; font-weight: 800; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+  @media (max-width: 520px) { .stat { padding: 10px 10px; } .stat b { font-size: 26px; } }
+  .leader { border: 2px solid var(--ink); padding: 16px 18px; margin: 18px 0 0; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+  .leader h2 { margin: 2px 0 0; font-family: var(--cond); font-variation-settings: "wdth" 72; font-stretch: 72%; font-weight: 900; font-size: 34px; line-height: 1; text-transform: uppercase; }
+  .leader .big { font-family: var(--cond); font-variation-settings: "wdth" 72; font-stretch: 72%; font-weight: 900; font-size: 44px; line-height: 1; color: var(--red); }
+  .add { margin: 26px 0 0; border-top: 1px solid var(--ink); padding-top: 14px; }
+  .add summary { cursor: pointer; font-family: var(--cond); font-variation-settings: "wdth" 78; font-stretch: 78%; font-weight: 900; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; list-style: none; }
+  .add summary::-webkit-details-marker { display: none; }
+  .add summary::after { content: " +"; color: var(--red); }
+  .add[open] summary::after { content: " –"; }
+  .winrow { display: grid; grid-template-columns: 72px 1fr; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--hair); }
+  .winrow .pic { width: 72px; height: 72px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; cursor: pointer; }
+  .winrow .pic img { width: 100%; height: 100%; object-fit: contain; }
+  .winrow i { display: block; font-style: normal; font-family: var(--cond); font-variation-settings: "wdth" 78; font-stretch: 78%; font-weight: 900; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .winrow b { display: block; text-transform: uppercase; font-size: 14px; }
+  .winrow span { color: var(--muted); font-size: 13px; }
+  .winrow .who { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .winrow .who em { font-style: normal; color: var(--good); font-weight: 700; }
+  .cons { margin-bottom: 26px; }
+  .picksgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px 8px; }
+  .pk { font-size: 11px; line-height: 1.2; }
+  .pk .pic { border: 1px solid var(--line); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; position: relative; }
+  .pk .pic img { width: 100%; height: 100%; object-fit: contain; }
+  .pk i { display: block; font-style: normal; font-family: var(--cond); font-variation-settings: "wdth" 78; font-stretch: 78%; font-weight: 900; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+  .pk b { display: block; text-transform: uppercase; font-size: 10.5px; }
+  .pk.hit .pic { box-shadow: inset 0 0 0 2px var(--good); border-color: var(--good); }
+  .pk.miss .pic { opacity: .5; }
+  .pk .st { position: absolute; top: 0; left: 0; color: #fff; font-family: var(--cond); font-variation-settings: "wdth" 78; font-stretch: 78%; font-weight: 900; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; padding: 3px 5px; }
+  .pk.hit .st { background: var(--good); } .pk.miss .st { background: var(--dark); }
+  .loading { padding: 60px 0; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap in">
+    <a class="wordmark" href="./" aria-label="GPHG 2026 Ballot home"><b>GPHG</b><span>2026</span><small>Ballot</small></a>
+    <nav class="topnav"><a href="./">Make a ballot</a><a class="on" href="board.html">Standings</a></nav>
+  </div>
+</header>
+
+<main id="app" class="wrap"><div class="loading">Loading…</div></main>
+
+<footer><div class="wrap">Nominee details and photographs are from <a href="https://www.gphg.org/en/gphg-2026/nominated-timepieces" target="_blank" rel="noopener">gphg.org</a>, © Fondation du Grand Prix d'Horlogerie de Genève. This is a friends' prediction pool and is not affiliated with the GPHG.</div></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="assets/core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const G = window.GPHG, esc = G.esc;
+  const app = document.getElementById('app');
+  let D, results = {}, ballots = [], late = [], tab = 'standings', me = null, openRow = null;
+
+  async function boot() {
+    try { D = await G.loadData(); } catch (e) { app.innerHTML = '<div class="notice red">Could not load nominee data.</div>'; return; }
+    const [b, r] = await Promise.all([G.loadJSON('data/ballots.json', []), G.loadJSON('data/results.json', {})]);
+    results = r || {};
+    const published = (Array.isArray(b) ? b : []).map(x => x && x.code ? G.decodeBallot(x.code) : null).filter(Boolean);
+    const extra = (G.lsGet(G.KEYS.extra, []) || []).map(G.decodeBallot).filter(Boolean);
+    const mine = G.lsGet(G.KEYS.ballot); if (mine && mine.code) { me = G.decodeBallot(mine.code); }
+    // ballots passed in the URL (#add=code,code) are merged for this viewer only
+    const addm = (location.hash || '').match(/[#&]add=([A-Za-z0-9_,-]+)/);
+    const fromUrl = addm ? addm[1].split(',').map(G.decodeBallot).filter(Boolean) : [];
+    if (fromUrl.length) { const cur = G.lsGet(G.KEYS.extra, []) || []; fromUrl.forEach(x => { if (!cur.includes(x.code)) cur.push(x.code); }); G.lsSet(G.KEYS.extra, cur); }
+    const merged = G.mergeBallots([published, extra, fromUrl, me ? [me] : []]);
+    ballots = merged.ballots; late = merged.late;
+    const t = (location.hash || '').match(/tab=(standings|consensus|winners)/); if (t) tab = t[1];
+    render();
+  }
+
+  function announcedCount() { return Object.keys(results).filter(k => results[k] !== null).length; }
+  function anyResults() { return Object.keys(results).length > 0; }
+
+  function render() {
+    const rows = G.rankBallots(ballots, results);
+    const n = ballots.length, ann = Object.keys(results).length;
+    const leader = rows[0];
+    const locked = G.isLocked();
+    // Before the lock, nobody's picks are shown (no herding): only who is in.
+    if (!locked && !anyResults() && tab !== 'standings') tab = 'standings';
+    let head;
+    if (!anyResults()) head = `<div class="eyebrow">Standings</div><h1 class="title big"><b>${locked ? 'The jury is deliberating' : 'The field is open'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1><p class="muted" style="margin:10px 0 0;max-width:620px">${locked ? 'Winners post here as they are announced in Geneva.' : 'Ballots lock ' + esc(G.fmtLock()) + '. Until then, see who’s in and what the crowd is backing.'}</p>`;
+    else head = `<div class="eyebrow">Standings · ${ann} of ${G.prizeList().length} prizes announced</div><h1 class="title big"><b>${ann >= G.prizeList().length ? 'Final standings' : 'Live standings'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1>`;
+    const stats = `<div class="statgrid"><div class="stat"><b>${n}</b><span>Ballots</span></div><div class="stat"><b>${ann}<small style="font-size:16px;color:var(--muted)">/${G.prizeList().length}</small></b><span>Prizes announced</span></div><div class="stat"><b>${leader && anyResults() ? leader.pts : '—'}</b><span>${leader && anyResults() ? 'Top score' : 'Top score tbd'}</span></div></div>`;
+    const lead = leader && anyResults() ? `<div class="leader"><div><div class="eyebrow">${ann >= G.prizeList().length ? 'Winner' : 'Currently leading'}</div><h2>${esc(leader.ballot.name)}</h2><div class="small muted">${leader.correct} of ${leader.announced} announced prizes called</div></div><div class="big">${leader.pts}<span style="font-size:14px;color:var(--muted)"> pts</span></div></div>` : '';
+    app.innerHTML = `
+      <div style="padding-top:26px">${head}</div>
+      ${stats}${lead}
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="standings" class="${tab === 'standings' ? 'on' : ''}">${locked || anyResults() ? 'Standings' : 'Who’s in'}</button>
+        ${locked || anyResults() ? `<button role="tab" data-tab="consensus" class="${tab === 'consensus' ? 'on' : ''}">Crowd picks</button>` : ''}
+        <button role="tab" data-tab="winners" class="${tab === 'winners' ? 'on' : ''}">Winners</button>
+      </div>
+      ${locked || anyResults() ? '' : '<p class="tiny muted" style="margin:-6px 0 14px">Everyone’s picks stay sealed until the ceremony starts, so nobody can copy the crowd.</p>'}
+      <div id="panel"></div>
+      <details class="add"><summary>Add ballot links to this view</summary>
+        <p class="small muted" style="margin:10px 0 8px">Paste one or more ballot links. They are kept on this device only; the official pool is whatever the commissioner publishes.</p>
+        <textarea class="ta" id="paste" placeholder="https://…/gphg-game/#b=…"></textarea>
+        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap"><button class="btn sm" id="addbtn">Add</button>${(G.lsGet(G.KEYS.extra, []) || []).length ? '<button class="btn sm ghost" id="clearbtn">Remove added ballots</button>' : ''}</div>
+      </details>`;
+    app.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; openRow = null; render(); }));
+    app.querySelector('#addbtn').addEventListener('click', () => {
+      const codes = (app.querySelector('#paste').value.match(/[A-Za-z0-9_-]{20,}/g) || []).map(c => G.decodeBallot(c)).filter(Boolean);
+      if (!codes.length) { toast('No valid ballot links found'); return; }
+      const cur = G.lsGet(G.KEYS.extra, []) || []; let added = 0; codes.forEach(x => { if (!cur.includes(x.code)) { cur.push(x.code); added++; } });
+      G.lsSet(G.KEYS.extra, cur); toast(added + ' added'); boot();
+    });
+    const cb = app.querySelector('#clearbtn'); if (cb) cb.addEventListener('click', () => { G.lsDel(G.KEYS.extra); boot(); });
+    const panel = app.querySelector('#panel');
+    if (tab === 'standings') panel.innerHTML = standings(rows);
+    else if (tab === 'consensus') panel.innerHTML = consensusView();
+    else panel.innerHTML = winnersView();
+    panel.querySelectorAll('button.name').forEach(b => b.addEventListener('click', () => { openRow = openRow === b.dataset.i ? null : b.dataset.i; render(); }));
+    panel.querySelectorAll('[data-detail]').forEach(el => el.addEventListener('click', () => openDetail(+el.dataset.detail)));
+  }
+
+  function standings(rows) {
+    if (!rows.length) return '<div class="empty">No ballots yet. Be the first: <a href="./">make yours</a>.</div>';
+    const has = anyResults();
+    const sealed = !G.isLocked() && !has;
+    const html = rows.map((r, i) => {
+      const b = r.ballot, isMe = me && me.code === b.code;
+      const aig = b.picks.aiguille == null ? '—' : G.watchLabel(b.picks.aiguille);
+      const open = !sealed && openRow === String(i);
+      const nameCell = sealed && !isMe ? `<span style="font-weight:700">${esc(b.name)}</span><div class="tiny muted">Ballot sealed</div>` : `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? ' <span class="pill gray">you</span>' : ''}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
+      return `<tr class="${isMe ? 'me' : ''} ${open ? 'open' : ''}"><td class="rank ${has && r.rank === 1 ? 'gold' : ''}">${has ? r.rank : ''}</td><td>${nameCell}</td><td class="num pts">${has ? r.pts : '<span class="muted" style="font-weight:400">—</span>'}</td><td class="num small muted">${has ? r.correct + '/' + r.announced : esc(G.fmtDate(b.ts))}</td></tr>${open ? `<tr class="exp"><td colspan="4">${picksGrid(r)}</td></tr>` : ''}`;
+    }).join('');
+    const lateNote = late.length ? `<p class="small muted" style="margin-top:12px">${late.length} ${late.length === 1 ? 'ballot' : 'ballots'} arrived after the lock and ${late.length === 1 ? 'is' : 'are'} not counted: ${esc(late.map(b => b.name).join(', '))}.</p>` : '';
+    return `<table class="tbl"><thead><tr><th></th><th>Name</th><th class="num">Pts</th><th class="num">${has ? 'Called' : 'Submitted'}</th></tr></thead><tbody>${html}</tbody></table><p class="tiny muted" style="margin-top:10px">${sealed ? 'Picks are revealed once the ceremony starts.' : 'Tap a name to see every pick.'}</p>${lateNote}`;
+  }
+  function picksGrid(r) {
+    return `<div class="picksgrid">${r.detail.map(d => { const w = d.pick == null ? null : D.watches[d.pick]; const cls = d.state === 'hit' ? 'hit' : d.state === 'miss' ? 'miss' : ''; return `<div class="pk ${cls}" ${w ? `data-detail="${w.id}" role="button" tabindex="0"` : ''}><div class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}${d.state === 'hit' ? '<span class="st">✓ ' + d.prize.pts + 'pt</span>' : d.state === 'miss' ? '<span class="st">✗</span>' : ''}</div><i>${esc(d.prize.name)}</i>${w ? `<b>${esc(w.brand)}</b>${esc(w.name)}` : '<b class="muted">no pick</b>'}</div>`; }).join('')}</div>`;
+  }
+  function consensusView() {
+    if (!ballots.length) return '<div class="empty">Crowd picks appear once ballots are in.</div>';
+    const c = G.consensus(ballots);
+    return G.prizeList().map(p => {
+      const data = c[p.key]; if (!data.n) return '';
+      const ids = Object.keys(data.counts).map(Number).sort((a, b) => data.counts[b] - data.counts[a] || a - b);
+      const win = Object.prototype.hasOwnProperty.call(results, p.key) ? results[p.key] : undefined;
+      const rows = ids.map(id => { const w = D.watches[id]; const pct = Math.round(data.counts[id] / data.n * 100); return `<div class="barrow ${win === id ? 'win' : ''}"><div class="pic" data-detail="${id}" role="button" tabindex="0"><img src="${G.thumb(id)}" alt="" loading="lazy"></div><div class="lab"><b>${esc(w.brand)}${win === id ? ' · winner' : ''}</b><span>${esc(w.name)}</span><div class="bar"><i style="width:${pct}%"></i></div></div><div class="pct">${pct}%</div></div>`; }).join('');
+      return `<div class="cons"><div class="sechead">${esc(p.name)}<span class="pts">${data.n} ${data.n === 1 ? 'pick' : 'picks'}${win === null ? ' · not awarded' : ''}</span></div><div class="bars">${rows}</div></div>`;
+    }).join('');
+  }
+  function winnersView() {
+    if (!anyResults()) return `<div class="empty">No winners yet. The ceremony is ${esc(D.ceremonyLabel)}.<br><span class="tiny">Follow the live stream at <a href="https://www.gphg.org" target="_blank" rel="noopener">gphg.org</a>.</span></div>`;
+    const c = G.consensus(ballots);
+    return G.prizeList().map(p => {
+      if (!Object.prototype.hasOwnProperty.call(results, p.key)) return `<div class="winrow"><div class="pic" style="cursor:default"></div><div><i>${esc(p.name)}</i><b class="muted">Not announced yet</b></div></div>`;
+      const id = results[p.key];
+      if (id === null) return `<div class="winrow"><div class="pic" style="cursor:default"></div><div><i>${esc(p.name)}</i><b class="muted">Not awarded this year</b></div></div>`;
+      const w = D.watches[id]; const n = c[p.key].n, k = c[p.key].counts[id] || 0;
+      const who = ballots.filter(b => G.pickFor(b.picks, p) === id).map(b => b.name);
+      return `<div class="winrow"><div class="pic" data-detail="${id}" role="button" tabindex="0"><img src="${G.thumb(id)}" alt="" loading="lazy"></div><div><i>${esc(p.name)} · ${p.pts} pt${p.pts > 1 ? 's' : ''}</i><b>${esc(w.brand)}</b><span>${esc(w.name)}</span><div class="who">${n ? (k ? `Called by <em>${esc(who.join(', '))}</em> (${Math.round(k / n * 100)}%)` : 'Nobody saw it coming') : ''}</div></div></div>`;
+    }).join('');
+  }
+
+  /* detail sheet (read-only) */
+  let sheetDepth = 0;
+  function openDetail(id) {
+    const w = D.watches[id]; if (!w) return;
+    const cat = D.categories[G.catOf(id)];
+    const imgs = Array.from({ length: w.imgs }, (_, k) => k);
+    const el = document.createElement('div'); el.className = 'sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+    el.innerHTML = `<div class="bar"><div class="wrap in"><div class="eyebrow ink">${esc(cat.name)} · nominee</div><button class="x" aria-label="Close">×</button></div></div>
+      <div class="wrap"><h1 class="title big" style="margin-top:20px"><b>${esc(w.brand)}</b><span>${esc(w.name)}</span></h1>
+      <div class="detail"><div class="gallery"><div class="main"><img id="mainimg" src="${G.full(id, 0)}" alt=""></div>${imgs.length > 1 ? `<div class="thumbs">${imgs.map(k => `<button type="button" class="${k === 0 ? 'on' : ''}" data-k="${k}"><img src="${G.thumb(id, k)}" alt=""></button>`).join('')}</div>` : ''}<div class="links"><a href="${esc(w.url)}" target="_blank" rel="noopener">GPHG page ↗</a>${w.video ? `<a href="${esc(w.video)}" target="_blank" rel="noopener">Video ↗</a>` : ''}</div></div>
+      <div><div class="pricebig">${esc(w.priceLabel)}</div><div class="small muted">Price incl. VAT · ${esc(cat.name)}</div><div class="specs">${w.specs.map(([k, v]) => `<div class="spec"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('')}</div><div class="sechead" style="margin-top:14px">Description</div><div class="desc">${w.desc || ''}</div></div></div></div>
+      <div class="actions"><div class="in"><button type="button" class="btn ghost" data-close>Close</button></div></div>`;
+    el.querySelectorAll('.thumbs button').forEach(b => b.addEventListener('click', () => { el.querySelector('#mainimg').src = G.full(id, +b.dataset.k); el.querySelectorAll('.thumbs button').forEach(x => x.classList.toggle('on', x === b)); }));
+    el.querySelector('.x').addEventListener('click', closeSheet); el.querySelector('[data-close]').addEventListener('click', closeSheet);
+    document.body.appendChild(el); document.body.classList.add('noscroll'); sheetDepth++; history.pushState({ sheet: 1 }, '');
+  }
+  function closeSheet(fromPop) { const s = document.querySelector('.sheet'); if (!s) return; s.remove(); sheetDepth = 0; document.body.classList.remove('noscroll'); if (fromPop !== true && history.state && history.state.sheet) history.back(); }
+  window.addEventListener('popstate', () => { if (sheetDepth) closeSheet(true); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+  let toastT; function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1800); }
+  boot();
+})();
+</script>
+</body>
+</html>
