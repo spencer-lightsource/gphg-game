@@ -46,8 +46,10 @@
   function b64u(str) { const bytes = new TextEncoder().encode(str); let bin = ''; bytes.forEach(b => bin += String.fromCharCode(b)); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
   function unb64u(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const bin = atob(s); const bytes = Uint8Array.from(bin, c => c.charCodeAt(0)); return new TextDecoder().decode(bytes); }
 
+  function cleanName(s) { return Array.from(String(s || '').replace(/[|\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 40).join('').trim(); }
+  function nameKey(s) { return String(s || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim(); }
   function encodeBallot(b) {
-    const name = String(b.name || '').replace(/[|\n\r]/g, ' ').trim().slice(0, 40);
+    const name = cleanName(b.name);
     const cats = b.picks.cats.map((id, i) => id == null ? '-' : String(id - i * 6 + 1)).join('');
     const body = ['1', name, cats, enc2(b.picks.aiguille), enc2(b.picks.audacity), enc2(b.picks.revelation), enc2(b.picks.chronometry), Math.floor(b.ts / 1000).toString(36)].join('|');
     return b64u(body + '|' + checksum(body));
@@ -63,7 +65,7 @@
       const parts = raw.split('|');
       if (parts.length !== 9 || parts[0] !== '1') return null;
       if (checksum(parts.slice(0, 8).join('|')) !== parts[8]) return null;
-      const name = parts[1].trim().slice(0, 40);
+      const name = cleanName(parts[1]);
       if (!name) return null;
       const cs = parts[2];
       if (!/^[1-6-]{14}$/.test(cs)) return null;
@@ -117,19 +119,41 @@
     return rows;
   }
 
-  // Merge ballots: one per name (case-insensitive); keep the latest that was submitted before the lock.
+  // Merge ballots: one per name (case/whitespace/Unicode-insensitive); keep the latest that arrived before the lock.
+  // A ballot is late if either its own timestamp or the commissioner's receipt time (b.received, when known) is at/after the lock.
   function mergeBallots(lists) {
     const map = new Map();
     const late = [];
     for (const list of lists) for (const b of list || []) {
       if (!b || !b.name || !b.picks) continue;
-      if (b.ts > LOCK_AT) { late.push(b); continue; }
-      const k = b.name.trim().toLowerCase();
+      if (Math.max(b.ts || 0, b.received || 0) >= LOCK_AT) { late.push(b); continue; }
+      const k = nameKey(b.name);
       const cur = map.get(k);
       if (!cur || b.ts > cur.ts) map.set(k, b);
     }
     return { ballots: [...map.values()].sort((a, b) => a.ts - b.ts), late };
   }
+
+  // results.json hygiene: keep only known prize keys with null or a valid watch id (category prizes must point into their own category).
+  function sanitizeResults(raw) {
+    const clean = {}, dropped = [];
+    if (!raw || typeof raw !== 'object') return { clean, dropped };
+    const prizes = prizeList();
+    for (const k of Object.keys(raw)) {
+      const p = prizes.find(x => x.key === k);
+      if (!p) { dropped.push(k + ' (unknown prize)'); continue; }
+      let v = raw[k];
+      if (v === null) { if (p.kind === 'special' && p.optional) { clean[k] = null; } else { dropped.push(k + ' (cannot be unawarded)'); } continue; }
+      if (typeof v === 'string' && v.trim() !== '' && isFinite(+v)) v = +v;
+      if (!Number.isInteger(v) || v < 0 || v >= DATA.watches.length) { dropped.push(k + ' (bad id ' + JSON.stringify(raw[k]) + ')'); continue; }
+      if (p.kind === 'cat' && catOf(v) !== p.idx) { dropped.push(k + ' (id ' + v + ' is not in that category)'); continue; }
+      clean[k] = v;
+    }
+    return { clean, dropped };
+  }
+
+  // Everyone sharing the top rank.
+  function leaders(rows) { return rows.filter(r => r.rank === 1); }
 
   function consensus(ballots) {
     const out = {};
@@ -155,5 +179,5 @@
   function watchLabel(id) { const w = DATA.watches[id]; return w ? w.brand + ' ' + w.name : '—'; }
   function possessive(name) { name = String(name || '').trim(); return /s$/i.test(name) ? name + '’' : name + '’s'; }
 
-  window.GPHG = { SITE, LOCK_AT, CAT_COUNT, SPECIALS, KEYS, loadData, loadJSON, get data() { return DATA; }, watchesInCat, catOf, thumb, full, emptyPicks, encodeBallot, decodeBallot, ballotURL, prizeList, pickFor, scoreBallot, maxPoints, rankBallots, mergeBallots, consensus, lsGet, lsSet, lsDel, esc, fmtDate, fmtLock, isLocked, watchLabel, possessive };
+  window.GPHG = { SITE, LOCK_AT, CAT_COUNT, SPECIALS, KEYS, loadData, loadJSON, get data() { return DATA; }, watchesInCat, catOf, thumb, full, emptyPicks, cleanName, nameKey, encodeBallot, decodeBallot, ballotURL, prizeList, pickFor, scoreBallot, maxPoints, rankBallots, mergeBallots, sanitizeResults, leaders, consensus, lsGet, lsSet, lsDel, esc, fmtDate, fmtLock, isLocked, watchLabel, possessive };
 })();

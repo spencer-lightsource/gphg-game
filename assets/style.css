@@ -245,3 +245,18 @@ footer a { font-weight: 500; color: var(--muted); }
 .leader h2 { word-break: break-word; overflow-wrap: anywhere; }
 .ballothead h1 { overflow-wrap: anywhere; }
 .sheet h1.title { margin-top: 28px !important; }
+
+/* review fixes: card = wrapper with a pick button and a separate details button; bigger hit areas; keyboard tiles */
+.grid { align-items: start; }
+.card .pick { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; color: inherit; font: inherit; }
+.card .pick:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
+.info { width: 40px; height: 40px; top: 4px; right: 4px; font-size: 15px; }
+.x { width: 44px; height: 44px; }
+button.mini { text-align: left; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; color: inherit; font: inherit; width: 100%; }
+button.mini:hover .pic, .gp:hover .pic { border-color: var(--ink); }
+.gp { cursor: pointer; }
+.hero .eyebrow { opacity: 1; }
+.topnav a, .topnav button { padding: 10px 0; }
+.btn.sm { min-height: 40px; }
+.tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.pill.warn { border-color: var(--red); color: var(--red); }

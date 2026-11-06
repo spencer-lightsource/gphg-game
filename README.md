@@ -13,7 +13,7 @@ Live: https://spencer-lightsource.github.io/gphg-game/
 
 ## Scoring
 
-1 pt per category winner (14), 3 pts for the Aiguille d'Or, 1 bonus pt each for Audacity, Horological Revelation and Chronometry when the jury awards them. Max 20. Ties: more prizes called, then the earlier ballot. One ballot per name; the latest ballot submitted before the lock counts; ballots timestamped after the lock are excluded.
+1 pt per category winner (14), 3 pts for the Aiguille d'Or, 1 bonus pt each for Audacity, Horological Revelation and Chronometry when the jury awards them. Max 20. Ties share a rank (more prizes called breaks a points tie; equal on both means a shared lead). One ballot per name; the latest ballot submitted before the lock counts; ballots timestamped after the lock are excluded.
 
 ## Publishing results
 

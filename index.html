@@ -46,7 +46,7 @@
 <body>
 <header class="topbar">
   <div class="wrap in">
-    <a class="wordmark" href="./" aria-label="GPHG 2026 Ballot home"><b>GPHG</b><span>2026</span><small>Ballot</small></a>
+    <a class="wordmark" href="#s=landing" aria-label="GPHG 2026 Ballot home"><b>GPHG</b><span>2026</span><small>Ballot</small></a>
     <nav class="topnav">
       <button type="button" id="nav-mine" class="hidden">My ballot</button>
       <a href="board.html">Standings</a>
@@ -79,7 +79,9 @@
     if (sub && sub.code) { const b = G.decodeBallot(sub.code); if (b) S.submitted = b; }
     const draft = G.lsGet(G.KEYS.draft);
     if (draft) { S.name = draft.name || ''; S.picks = Object.assign(G.emptyPicks(), draft.picks || {}); S.lastStep = draft.step || null; }
+    else if (S.submitted) { S.name = S.submitted.name; S.picks = JSON.parse(JSON.stringify(S.submitted.picks)); }   // so Back from the card never shows a blank review
     if (!S.name) S.name = G.lsGet(G.KEYS.name, '') || '';
+    if (history.state && history.state.sheet) history.replaceState(null, '');   // a sheet was open when the page was last unloaded
     document.getElementById('nav-mine').addEventListener('click', () => go('card'));
     window.addEventListener('hashchange', route);
     window.addEventListener('popstate', () => {
@@ -93,7 +95,13 @@
   function route() {
     const h = location.hash || '';
     const b = (location.search || '').match(/[?&]b=([A-Za-z0-9_-]+)/) || h.match(/^#b=([A-Za-z0-9_-]+)/);
-    if (b && !/^#s=/.test(h)) { const ballot = G.decodeBallot(b[1]); if (ballot) { S.viewing = ballot; return render('view'); } return render('badlink'); }
+    if (b && !/^#s=/.test(h)) {
+      const ballot = G.decodeBallot(b[1]);
+      if (!ballot) return render('badlink');
+      if (S.submitted && ballot.code === S.submitted.code) return render('card');   // opening your own link
+      S.viewing = ballot; return render('view');
+    }
+    if (location.search) history.replaceState(null, '', location.pathname + h);   // leave a friend's ?b= behind once you move on
     const s = h.match(/^#s=([a-z0-9-]+)/);
     if (s && (STEPS.includes(s[1]) || s[1] === 'landing' || s[1] === 'card')) return render(s[1]);
     if (S.submitted) return render('card');
@@ -133,7 +141,7 @@
     const made = picksMade();
     let resume = '';
     if (S.submitted) {
-      resume = `<div class="resume"><div class="eyebrow">Ballot received</div><p style="margin:6px 0 0">${esc(S.submitted.name)}, your ballot is in${G.isLocked() ? '' : '. You can still change it until the ceremony starts'}.</p><div class="btns"><button class="btn sm" data-go="card">View my ballot</button>${G.isLocked() ? '' : '<button class="btn sm ghost" data-act="edit">Edit picks</button>'}</div></div>`;
+      resume = `<div class="resume"><div class="eyebrow">Ballot locked on this device</div><p style="margin:6px 0 0">${esc(S.submitted.name)}, your picks are locked. They only count once Spencer has your link${G.isLocked() ? '' : ', and you can still change them until the ceremony starts'}.</p><div class="btns"><button class="btn sm red" data-go="card">Send my link</button>${G.isLocked() ? '' : '<button class="btn sm ghost" data-act="edit">Edit picks</button>'}</div></div>`;
     } else if (made > 0 && S.name) {
       resume = `<div class="resume"><div class="eyebrow">Welcome back</div><p style="margin:6px 0 0">${esc(S.name)}, you've made ${made} of 15 required picks.</p><div class="btns"><button class="btn sm" data-act="resume">Resume</button><button class="btn sm ghost" data-act="reset">Start over</button></div></div>`;
     }
@@ -180,8 +188,13 @@
   function firstIncomplete() { const i = S.picks.cats.findIndex(x => x == null); if (i >= 0) return 'cat-' + i; if (S.picks.aiguille == null) return 'aiguille'; return 'review'; }
   function act(a) {
     if (a === 'resume') go(firstIncomplete());
-    else if (a === 'reset') { if (!confirm('Start a fresh ballot on this device? The saved one stays valid wherever its link was sent.')) return; S.name = ''; S.picks = G.emptyPicks(); S.submitted = null; G.lsDel(G.KEYS.draft); G.lsDel(G.KEYS.ballot); go('landing'); }
-    else if (a === 'edit') { if (!S.submitted) return; S.name = S.submitted.name; S.picks = JSON.parse(JSON.stringify(S.submitted.picks)); saveDraft(); go('review'); }
+    else if (a === 'reset') { if (!confirm('Start a fresh ballot on this device? The saved one stays valid wherever its link was sent.')) return; S.name = ''; S.picks = G.emptyPicks(); S.submitted = null; G.lsDel(G.KEYS.draft); G.lsDel(G.KEYS.ballot); G.lsDel(G.KEYS.name); go('landing'); }
+    else if (a === 'edit') {
+      if (!S.submitted) return;
+      // Resume an edit already in progress; otherwise start editing from the locked picks.
+      if (!G.lsGet(G.KEYS.draft)) { S.name = S.submitted.name; S.picks = JSON.parse(JSON.stringify(S.submitted.picks)); saveDraft(); }
+      go('review');
+    }
   }
 
   /* ---------- category round ---------- */
@@ -203,11 +216,10 @@
       </div>`;
     const grid = app.querySelector('#grid');
     grid.addEventListener('click', e => {
-      const info = e.target.closest('.info'); const cardEl = e.target.closest('.card');
-      if (!cardEl) return;
+      const cardEl = e.target.closest('.card'); if (!cardEl) return;
       const id = +cardEl.dataset.id;
-      if (info) { e.preventDefault(); openDetail(id, { pickable: true, onPick: () => { pickCat(i, id); } }); return; }
-      pickCat(i, id);
+      if (e.target.closest('.info')) { e.preventDefault(); openDetail(id, { pickable: true, onPick: () => { pickCat(i, id); } }); return; }
+      if (e.target.closest('.pick')) pickCat(i, id);
     });
     app.querySelector('#back').addEventListener('click', () => go(i === 0 ? 'landing' : 'cat-' + (i - 1)));
     app.querySelector('#next').addEventListener('click', () => go(i === 13 ? 'aiguille' : 'cat-' + (i + 1)));
@@ -216,14 +228,17 @@
   }
   function card(w, k) {
     const on = S.picks.cats[G.catOf(w.id)] === w.id;
-    return `<button type="button" class="card ${on ? 'on' : ''}" data-id="${w.id}" aria-pressed="${on}">
-      <div class="pic"><span class="tick">Your pick</span><span class="info" role="button" aria-label="Details for ${esc(w.brand + ' ' + w.name)}">i</span><img src="${G.thumb(w.id)}" alt="" ${k > 1 ? 'loading="lazy"' : ''}></div>
-      <div class="brand">${esc(w.brand)}</div><div class="model">${esc(w.name)}</div><div class="price">${esc(w.priceLabel)}</div>
-    </button>`;
+    return `<div class="card ${on ? 'on' : ''}" data-id="${w.id}">
+      <button type="button" class="pick" aria-pressed="${on}" aria-label="Pick ${esc(w.brand + ' ' + w.name)}">
+        <div class="pic"><span class="tick">Your pick</span><img src="${G.thumb(w.id)}" alt="" ${k > 1 ? 'loading="lazy"' : ''}></div>
+        <div class="brand">${esc(w.brand)}</div><div class="model">${esc(w.name)}</div><div class="price">${esc(w.priceLabel)}</div>
+      </button>
+      <button type="button" class="info" aria-label="Details for ${esc(w.brand + ' ' + w.name)}">i</button>
+    </div>`;
   }
   function pickCat(i, id) {
     S.picks.cats[i] = id; saveDraft();
-    app.querySelectorAll('.card').forEach(el => { const on = +el.dataset.id === id; el.classList.toggle('on', on); el.setAttribute('aria-pressed', on); });
+    app.querySelectorAll('.card').forEach(el => { const on = +el.dataset.id === id; el.classList.toggle('on', on); const b = el.querySelector('.pick'); if (b) b.setAttribute('aria-pressed', on); });
     const n = app.querySelector('#next'); if (n) n.disabled = false;
   }
 
@@ -238,7 +253,7 @@
         <div class="ptsbadge red">${sp.pts} pts</div>
         <p class="blurb">${esc(sp.blurb)} Pick from your category winners below, or search every nominee.</p>
       </div>
-      <div class="search"><span aria-hidden="true">⌕</span><input id="q" type="search" placeholder="Search all 84 nominees by brand or model" autocomplete="off"></div>
+      <div class="search"><span aria-hidden="true">⌕</span><input id="q" type="search" placeholder="Search all 84 nominees" aria-label="Search all 84 nominees by brand or model" autocomplete="off"></div>
       <div id="list"></div>
       <div class="actions">
         <button class="btn ghost" id="back">← Back</button>
@@ -384,7 +399,7 @@
         <p class="small muted" style="margin:12px 0 0">Collecting ballots? Open the <a href="commissioner.html">commissioner’s desk</a> to add this one to the pool.</p>
       </div>`}
       <div class="sechead">Grand Prix · Aiguille d’Or<span class="pts">3 pts</span></div>
-      ${aig ? `<div class="gp"><div class="pic"><img src="${G.full(aig.id)}" alt=""></div><div><div class="eyebrow">Best in show</div><h3>${esc(aig.brand)}</h3><div class="model">${esc(aig.name)}</div><div class="small muted" style="margin-top:6px">${esc(D.categories[G.catOf(aig.id)].name)} · ${esc(aig.priceLabel)}</div></div></div>` : '<div class="empty">No pick</div>'}
+      ${aig ? `<div class="gp" role="button" tabindex="0" aria-label="Details for ${esc(aig.brand + ' ' + aig.name)}"><div class="pic"><img src="${G.full(aig.id)}" alt=""></div><div><div class="eyebrow">Best in show</div><h3>${esc(aig.brand)}</h3><div class="model">${esc(aig.name)}</div><div class="small muted" style="margin-top:6px">${esc(D.categories[G.catOf(aig.id)].name)} · ${esc(aig.priceLabel)}</div></div></div>` : '<div class="empty">No pick</div>'}
       <div class="sechead">Category winners<span class="pts">1 pt each</span></div>
       <div class="minigrid">${minis}</div>
       ${bonus ? `<div class="sechead">Bonus prizes<span class="pts">1 pt each</span></div><div class="minigrid">${bonus}</div>` : ''}
@@ -404,7 +419,8 @@
   }
   function mini(label, id) {
     const w = id == null ? null : D.watches[id];
-    return `<div class="mini" ${w ? `data-id="${w.id}" role="button" tabindex="0"` : ''}><div class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}</div><div class="cat">${esc(label)}</div>${w ? `<div class="brand">${esc(w.brand)}</div><div class="model">${esc(w.name)}</div>` : '<div class="model">No pick</div>'}</div>`;
+    const inner = `<div class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}</div><div class="cat">${esc(label)}</div>${w ? `<div class="brand">${esc(w.brand)}</div><div class="model">${esc(w.name)}</div>` : '<div class="model">No pick</div>'}`;
+    return w ? `<button type="button" class="mini" data-id="${w.id}" aria-label="${esc(label + ': ' + w.brand + ' ' + w.name)}">${inner}</button>` : `<div class="mini">${inner}</div>`;
   }
   async function copy(url) {
     try { await navigator.clipboard.writeText(url); toast('Link copied'); }
@@ -484,24 +500,34 @@
     setTimeout(() => { try { q.focus({ preventScroll: true }); } catch (e) {} }, 50);
     draw();
   }
+  const focusStack = [];
+  function setInert(on) { ['header', '#app', 'footer'].forEach(sel => { const el = document.querySelector(sel); if (el) { if (on) el.setAttribute('inert', ''); else el.removeAttribute('inert'); } }); }
   function showSheet(el) {
+    focusStack.push(document.activeElement);
     document.body.appendChild(el); document.body.classList.add('noscroll'); sheetDepth++;
+    setInert(true);
     history.pushState({ sheet: sheetDepth }, '');
+    const x = el.querySelector('.x'); if (x) { try { x.focus({ preventScroll: true }); } catch (e) {} }
   }
   function closeSheet(fromPop) {
     const sheets = document.querySelectorAll('.sheet'); if (!sheets.length) return;
     sheets[sheets.length - 1].remove(); sheetDepth = Math.max(0, sheetDepth - 1);
-    if (sheetDepth === 0) document.body.classList.remove('noscroll');
+    if (sheetDepth === 0) { document.body.classList.remove('noscroll'); setInert(false); }
+    const prev = focusStack.pop(); if (prev && prev.isConnected && sheetDepth === 0) { try { prev.focus({ preventScroll: true }); } catch (e) {} }
     if (!fromPop && history.state && history.state.sheet) { pendingBack = true; history.back(); setTimeout(() => { if (pendingBack) { pendingBack = false; const s = pendingNav; pendingNav = null; if (s) go(s); } }, 400); }
   }
 
   /* ---------- keys & toast ---------- */
   function onKey(e) {
     if (e.key === 'Escape' && sheetDepth > 0) { closeSheet(); return; }
+    // Enter/Space on anything with role=button behaves like a click (tiles rendered as divs).
+    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.getAttribute && e.target.getAttribute('role') === 'button' && e.target.tagName !== 'BUTTON') { e.preventDefault(); e.target.click(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;   // Cmd/Ctrl/Alt+digit are browser tab shortcuts, not picks
     if (sheetDepth > 0 || !S.step || !S.step.startsWith('cat-')) return;
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
     const i = +S.step.slice(4);
     if (/^[1-6]$/.test(e.key)) { pickCat(i, i * 6 + (+e.key - 1)); }
+    else if (e.key === 'Enter' && e.target && e.target.tagName === 'BUTTON' && e.target.id !== 'next') return;   // Enter on a focused card just picks it
     else if ((e.key === 'ArrowRight' || e.key === 'Enter') && S.picks.cats[i] != null) { const n = app.querySelector('#next'); n && n.click(); }
     else if (e.key === 'ArrowLeft') { const b = app.querySelector('#back'); b && b.click(); }
   }

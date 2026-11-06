@@ -74,16 +74,22 @@
   'use strict';
   const G = window.GPHG, esc = G.esc;
   const app = document.getElementById('app');
-  let D, results = {}, ballots = [], late = [], tab = 'standings', me = null, openRow = null, publishedCount = 0;
+  let D, results = {}, ballots = [], late = [], tab = 'standings', me = null, openRow = null, publishedCount = 0, meUnsent = false;
 
   async function boot() {
     try { D = await G.loadData(); } catch (e) { app.innerHTML = '<div class="notice red">Could not load nominee data.</div>'; return; }
     const [b, r] = await Promise.all([G.loadJSON('data/ballots.json', []), G.loadJSON('data/results.json', {})]);
-    results = r || {};
-    const published = (Array.isArray(b) ? b : []).map(x => x && x.code ? G.decodeBallot(x.code) : null).filter(Boolean);
+    results = G.sanitizeResults(r || {}).clean;
+    const published = (Array.isArray(b) ? b : []).map(x => {
+      if (!x || !x.code) return null;
+      const d = G.decodeBallot(x.code);
+      if (d && x.received) { const t = Date.parse(x.received); if (isFinite(t)) d.received = t; }
+      return d;
+    }).filter(Boolean);
     publishedCount = published.length;
     const extra = (G.lsGet(G.KEYS.extra, []) || []).map(G.decodeBallot).filter(Boolean);
     const mine = G.lsGet(G.KEYS.ballot); if (mine && mine.code) { me = G.decodeBallot(mine.code); }
+    meUnsent = !!(me && !published.some(x => x.code === me.code));
     // ballots passed in the URL (#add=code,code) are merged for this viewer only
     const addm = (location.hash || '').match(/[#&]add=([A-Za-z0-9_,-]+)/);
     const fromUrl = addm ? addm[1].split(',').map(G.decodeBallot).filter(Boolean) : [];
@@ -94,7 +100,6 @@
     render();
   }
 
-  function announcedCount() { return Object.keys(results).filter(k => results[k] !== null).length; }
   function anyResults() { return Object.keys(results).length > 0; }
 
   function render() {
@@ -106,16 +111,17 @@
     if (!anyResults()) head = `<div class="eyebrow">Standings</div><h1 class="title big"><b>${locked ? 'The jury is deliberating' : 'The field is open'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1><p class="muted" style="margin:10px 0 0;max-width:620px">${locked ? 'Winners post here as they are announced in Geneva.' : 'Ballots lock ' + esc(G.fmtLock()) + '. Until then, see who’s in, compare picks and check what the crowd is backing.'}</p>`;
     else head = `<div class="eyebrow">Standings · ${ann} of ${G.prizeList().length} prizes announced</div><h1 class="title big"><b>${ann >= G.prizeList().length ? 'Final standings' : 'Live standings'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1>`;
     const stats = `<div class="statgrid"><div class="stat"><b>${n}</b><span>Ballots</span></div><div class="stat"><b>${ann}<small style="font-size:16px;color:var(--muted)">/${G.prizeList().length}</small></b><span>Prizes announced</span></div><div class="stat"><b>${leader && anyResults() ? leader.pts : '—'}</b><span>${leader && anyResults() ? 'Top score' : 'Top score tbd'}</span></div></div>`;
-    const lead = leader && anyResults() ? `<div class="leader"><div><div class="eyebrow">${ann >= G.prizeList().length ? 'Winner' : 'Currently leading'}</div><h2>${esc(leader.ballot.name)}</h2><div class="small muted">${leader.correct} of ${leader.announced} announced prizes called</div></div><div class="big">${leader.pts}<span style="font-size:14px;color:var(--muted)"> pts</span></div></div>` : '';
+    const top = G.leaders(rows);
+    const lead = leader && anyResults() ? `<div class="leader"><div><div class="eyebrow">${top.length > 1 ? (ann >= G.prizeList().length ? 'Tied winners' : 'Tied for the lead') : (ann >= G.prizeList().length ? 'Winner' : 'Currently leading')}</div><h2>${esc(top.map(r => r.ballot.name).join(' · '))}</h2><div class="small muted">${leader.correct} of ${leader.announced} announced prizes called</div></div><div class="big">${leader.pts}<span style="font-size:14px;color:var(--muted)"> pts</span></div></div>` : '';
     app.innerHTML = `
       <div style="padding-top:26px">${head}</div>
       ${stats}${lead}
       <div class="tabs" role="tablist">
-        <button role="tab" data-tab="standings" class="${tab === 'standings' ? 'on' : ''}">Standings</button>
-        <button role="tab" data-tab="consensus" class="${tab === 'consensus' ? 'on' : ''}">Crowd picks</button>
-        <button role="tab" data-tab="winners" class="${tab === 'winners' ? 'on' : ''}">Winners</button>
+        <button role="tab" data-tab="standings" aria-selected="${tab === 'standings'}" class="${tab === 'standings' ? 'on' : ''}">Standings</button>
+        <button role="tab" data-tab="consensus" aria-selected="${tab === 'consensus'}" class="${tab === 'consensus' ? 'on' : ''}">Crowd picks</button>
+        <button role="tab" data-tab="winners" aria-selected="${tab === 'winners'}" class="${tab === 'winners' ? 'on' : ''}">Winners</button>
       </div>
-      ${publishedCount === 0 ? '<p class="tiny muted" style="margin:-6px 0 14px">Ballots appear here once Spencer adds them to the pool from the links you send him. Your own ballot shows from this device right away.</p>' : ''}
+      ${meUnsent ? '<p class="tiny" style="margin:-6px 0 14px;color:var(--red);font-weight:600">Your ballot shows here from this device, but it is not in the pool yet. Send Spencer your link from <a href="./">your ballot card</a>.</p>' : publishedCount === 0 ? '<p class="tiny muted" style="margin:-6px 0 14px">Ballots appear here once Spencer adds them to the pool from the links you send him.</p>' : ''}
       <div id="panel"></div>
       <details class="add"><summary>Add ballot links to this view</summary>
         <p class="small muted" style="margin:10px 0 8px">Paste one or more ballot links. They are kept on this device only; the official pool is whatever the commissioner publishes.</p>
@@ -145,7 +151,7 @@
       const b = r.ballot, isMe = me && me.code === b.code;
       const aig = b.picks.aiguille == null ? '—' : G.watchLabel(b.picks.aiguille);
       const open = openRow === String(i);
-      const nameCell = `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? ' <span class="pill gray">you</span>' : ''}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
+      const nameCell = `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? (meUnsent ? ' <span class="pill warn">you · not sent yet</span>' : ' <span class="pill gray">you</span>') : ''}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
       return `<tr class="${isMe ? 'me' : ''} ${open ? 'open' : ''}"><td class="rank ${has && r.rank === 1 ? 'gold' : ''}">${has ? r.rank : ''}</td><td>${nameCell}</td><td class="num pts">${has ? r.pts : '<span class="muted" style="font-weight:400">—</span>'}</td><td class="num small muted">${has ? r.correct + '/' + r.announced : esc(G.fmtDate(b.ts))}</td></tr>${open ? `<tr class="exp"><td colspan="4">${picksGrid(r)}</td></tr>` : ''}`;
     }).join('');
     const lateNote = late.length ? `<p class="small muted" style="margin-top:12px">${late.length} ${late.length === 1 ? 'ballot' : 'ballots'} arrived after the lock and ${late.length === 1 ? 'is' : 'are'} not counted: ${esc(late.map(b => b.name).join(', '))}.</p>` : '';
@@ -196,7 +202,10 @@
   }
   function closeSheet(fromPop) { const s = document.querySelector('.sheet'); if (!s) return; s.remove(); sheetDepth = 0; document.body.classList.remove('noscroll'); if (fromPop !== true && history.state && history.state.sheet) history.back(); }
   window.addEventListener('popstate', () => { if (sheetDepth) closeSheet(true); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeSheet(); return; }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.getAttribute && e.target.getAttribute('role') === 'button' && e.target.tagName !== 'BUTTON') { e.preventDefault(); e.target.click(); }
+  });
   let toastT; function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1800); }
   boot();
 })();
