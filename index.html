@@ -161,7 +161,7 @@
           <div class="steps">
             <div><span class="n">1</span><div><b>Pick a winner in all 14 categories</b><span>Six nominees each. Tap a watch to pick it, tap ⓘ to see photos, specs, price and the brand’s pitch.</span></div></div>
             <div><span class="n">2</span><div><b>Name the Aiguille d’Or</b><span>Best in show, worth 3 points. Then an optional bonus round for the jury’s special prizes.</span></div></div>
-            <div><span class="n">3</span><div><b>Lock it in and send the link</b><span>Your ballot becomes a link. Text it to Spencer so it counts, then watch the standings after the ceremony.</span></div></div>
+            <div><span class="n">3</span><div><b>Lock it in and send the link</b><span>Your ballot becomes a link. Text it to Spencer so it counts, then compare everyone’s picks on the standings page and see who called it after the ceremony.</span></div></div>
           </div>
           <div class="sechead">Scoring</div>
           <p class="scoring"><b>1 point</b> per category winner (14). <b>3 points</b> for the Aiguille d’Or. <b>1 bonus point</b> each for Audacity, Horological Revelation and Chronometry, if the jury awards them. Ties go to whoever called more prizes, then to the earlier ballot.</p>
@@ -373,7 +373,7 @@
           <button class="btn red" id="share">Share</button>
           <button class="btn" id="copy">Copy link</button>
           <button class="btn ghost" id="dl">Download</button>
-          <a class="btn ghost" href="board.html">Standings</a>
+          <a class="btn ghost" href="board.html">Everyone’s picks</a>
         </div>
         <div class="linkbox"><code id="url">${esc(url)}</code></div>
         <p class="small muted" style="margin:12px 0 0">${G.isLocked() ? 'The ceremony has started, so picks are final.' : 'Changed your mind? <button class="linkbtn" data-act="edit">Edit picks</button> until the ceremony starts, then resend the link.'}</p>

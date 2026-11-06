@@ -100,11 +100,19 @@
 
       <div class="box">
         <h2>3 · Publish</h2>
-        <p>From the repo folder:</p>
+        <p>Fastest, works from your phone: paste a GitHub token once and publish straight to the site. The token stays in this browser only.</p>
+        <div class="formgrid" style="align-items:end">
+          <div><label for="ghtoken">GitHub token</label><input class="input" id="ghtoken" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(G.lsGet('gphg26.ghtoken', '') || '')}" style="font-size:14px"></div>
+          <div class="btns" style="margin:0"><button class="btn sm ghost" id="savetok">Save on this device</button><button class="btn sm ghost" id="forgettok">Forget</button></div>
+        </div>
+        <p class="tiny">Create one at github.com → Settings → Developer settings → Personal access tokens → Fine-grained → repository <code>spencer-lightsource/gphg-game</code> → Repository permissions → Contents: Read and write.</p>
+        <div class="btns"><button class="btn sm" id="pubb">Publish ballots</button><button class="btn sm" id="pubr">Publish winners</button><button class="btn sm red" id="puball">Publish both</button></div>
+        <p class="small" id="pubstatus" style="margin-top:10px"></p>
+        <p>Or, from the repo folder:</p>
         <pre class="out">cp ~/Downloads/ballots.json data/ballots.json
 cp ~/Downloads/results.json data/results.json
 git add data && git commit -m "Update pool" && git push</pre>
-        <p>GitHub Pages redeploys in about a minute. Or tell Claude Code: “add these ballots” / “post these winners”.</p>
+        <p>GitHub Pages redeploys in about a minute either way. Or tell Claude Code: “add these ballots” / “post these winners”.</p>
       </div>`;
 
     app.querySelector('#add').addEventListener('click', () => {
@@ -124,6 +132,40 @@ git add data && git commit -m "Update pool" && git push</pre>
     app.querySelector('#dlr').addEventListener('click', () => dl('results.json', JSON.stringify(results, null, 1)));
     app.querySelector('#cpr').addEventListener('click', () => copy(JSON.stringify(results, null, 1)));
     app.querySelector('#clr').addEventListener('click', () => { if (confirm('Clear all winners?')) { results = {}; render(); } });
+    app.querySelector('#savetok').addEventListener('click', () => { const t = app.querySelector('#ghtoken').value.trim(); if (!t) { toast('Paste a token first'); return; } G.lsSet('gphg26.ghtoken', t); toast('Token saved on this device'); });
+    app.querySelector('#forgettok').addEventListener('click', () => { G.lsDel('gphg26.ghtoken'); app.querySelector('#ghtoken').value = ''; toast('Token forgotten'); });
+    app.querySelector('#pubb').addEventListener('click', () => publishAll(['ballots']));
+    app.querySelector('#pubr').addEventListener('click', () => publishAll(['results']));
+    app.querySelector('#puball').addEventListener('click', () => publishAll(['ballots', 'results']));
+  }
+
+  /* ---------- publish straight to GitHub (Contents API) ---------- */
+  const REPO = 'spencer-lightsource/gphg-game';
+  function token() { return (app.querySelector('#ghtoken').value || G.lsGet('gphg26.ghtoken', '') || '').trim(); }
+  async function ghFetch(path, init) {
+    const t = token(); if (!t) throw new Error('No GitHub token. Paste one above.');
+    const res = await fetch('https://api.github.com/repos/' + REPO + '/contents/' + path, Object.assign({ headers: { Authorization: 'Bearer ' + t, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' } }, init || {}));
+    return res;
+  }
+  async function publishFile(path, text, message) {
+    let sha;
+    const r = await ghFetch(path + '?ref=main');
+    if (r.status === 200) sha = (await r.json()).sha;
+    else if (r.status !== 404) throw new Error('GitHub read failed (' + r.status + '). Check the token has Contents access to ' + REPO + '.');
+    const content = btoa(unescape(encodeURIComponent(text)));
+    const w = await ghFetch(path, { method: 'PUT', body: JSON.stringify({ message, content, sha, branch: 'main' }) });
+    if (!w.ok) throw new Error('GitHub write failed (' + w.status + '): ' + (await w.text()).slice(0, 160));
+    return (await w.json()).commit.sha.slice(0, 7);
+  }
+  async function publishAll(which) {
+    const st = app.querySelector('#pubstatus'); st.textContent = 'Publishing…';
+    try {
+      const done = [];
+      if (which.includes('ballots')) done.push('ballots.json @ ' + await publishFile('data/ballots.json', app.querySelector('#bjson').textContent, 'Update ballots (' + entries().ballots.length + ' in pool)'));
+      if (which.includes('results')) done.push('results.json @ ' + await publishFile('data/results.json', JSON.stringify(results, null, 1), 'Update winners (' + Object.keys(results).length + ' announced)'));
+      st.innerHTML = '<span style="color:var(--good);font-weight:700">Published</span> ' + esc(done.join(' · ')) + '. The site updates in about a minute: <a href="board.html" target="_blank" rel="noopener">standings</a>.';
+      toast('Published');
+    } catch (e) { st.innerHTML = '<span style="color:var(--red);font-weight:700">Failed.</span> ' + esc(e.message); toast('Publish failed'); }
   }
   function dl(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
   async function copy(t) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch (e) { toast('Select and copy manually'); } }

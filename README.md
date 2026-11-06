@@ -7,8 +7,8 @@ Live: https://spencer-lightsource.github.io/gphg-game/
 ## How it works
 
 - `index.html` — the game. Name → 14 category rounds → Aiguille d'Or → optional bonus prizes → review → lock. The locked ballot is encoded into a link (`?b=…`). Friends send that link to the commissioner.
-- `board.html` — standings. Reads `data/ballots.json` and `data/results.json`. Picks stay sealed until the ceremony starts (Sat 7 Nov 2026, 18:00 Geneva). Anyone can paste extra ballot links to preview standings on their own device.
-- `commissioner.html` — owner tools. Paste ballot links → download `ballots.json`. Pick winners → download `results.json`. Commit both into `data/` and push.
+- `board.html` — standings. Reads `data/ballots.json` and `data/results.json`. Everyone's picks are visible as soon as they are in the pool (it's a friends' game). Anyone can paste extra ballot links to preview standings on their own device. Ballots lock Sat 7 Nov 2026, 18:00 Geneva.
+- `commissioner.html` — owner tools. Paste ballot links → `ballots.json`. Pick winners → `results.json`. Publish either by pasting a fine-grained GitHub token (Contents: read/write on this repo; stored only in that browser) and pressing Publish, or by committing the downloaded files into `data/` and pushing.
 - `assets/core.js` — data loading, ballot encode/decode, scoring, merge rules.
 
 ## Scoring

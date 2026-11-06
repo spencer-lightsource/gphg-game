@@ -74,13 +74,14 @@
   'use strict';
   const G = window.GPHG, esc = G.esc;
   const app = document.getElementById('app');
-  let D, results = {}, ballots = [], late = [], tab = 'standings', me = null, openRow = null;
+  let D, results = {}, ballots = [], late = [], tab = 'standings', me = null, openRow = null, publishedCount = 0;
 
   async function boot() {
     try { D = await G.loadData(); } catch (e) { app.innerHTML = '<div class="notice red">Could not load nominee data.</div>'; return; }
     const [b, r] = await Promise.all([G.loadJSON('data/ballots.json', []), G.loadJSON('data/results.json', {})]);
     results = r || {};
     const published = (Array.isArray(b) ? b : []).map(x => x && x.code ? G.decodeBallot(x.code) : null).filter(Boolean);
+    publishedCount = published.length;
     const extra = (G.lsGet(G.KEYS.extra, []) || []).map(G.decodeBallot).filter(Boolean);
     const mine = G.lsGet(G.KEYS.ballot); if (mine && mine.code) { me = G.decodeBallot(mine.code); }
     // ballots passed in the URL (#add=code,code) are merged for this viewer only
@@ -101,10 +102,8 @@
     const n = ballots.length, ann = Object.keys(results).length;
     const leader = rows[0];
     const locked = G.isLocked();
-    // Before the lock, nobody's picks are shown (no herding): only who is in.
-    if (!locked && !anyResults() && tab !== 'standings') tab = 'standings';
     let head;
-    if (!anyResults()) head = `<div class="eyebrow">Standings</div><h1 class="title big"><b>${locked ? 'The jury is deliberating' : 'The field is open'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1><p class="muted" style="margin:10px 0 0;max-width:620px">${locked ? 'Winners post here as they are announced in Geneva.' : 'Ballots lock ' + esc(G.fmtLock()) + '. Until then, see who’s in and what the crowd is backing.'}</p>`;
+    if (!anyResults()) head = `<div class="eyebrow">Standings</div><h1 class="title big"><b>${locked ? 'The jury is deliberating' : 'The field is open'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1><p class="muted" style="margin:10px 0 0;max-width:620px">${locked ? 'Winners post here as they are announced in Geneva.' : 'Ballots lock ' + esc(G.fmtLock()) + '. Until then, see who’s in, compare picks and check what the crowd is backing.'}</p>`;
     else head = `<div class="eyebrow">Standings · ${ann} of ${G.prizeList().length} prizes announced</div><h1 class="title big"><b>${ann >= G.prizeList().length ? 'Final standings' : 'Live standings'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1>`;
     const stats = `<div class="statgrid"><div class="stat"><b>${n}</b><span>Ballots</span></div><div class="stat"><b>${ann}<small style="font-size:16px;color:var(--muted)">/${G.prizeList().length}</small></b><span>Prizes announced</span></div><div class="stat"><b>${leader && anyResults() ? leader.pts : '—'}</b><span>${leader && anyResults() ? 'Top score' : 'Top score tbd'}</span></div></div>`;
     const lead = leader && anyResults() ? `<div class="leader"><div><div class="eyebrow">${ann >= G.prizeList().length ? 'Winner' : 'Currently leading'}</div><h2>${esc(leader.ballot.name)}</h2><div class="small muted">${leader.correct} of ${leader.announced} announced prizes called</div></div><div class="big">${leader.pts}<span style="font-size:14px;color:var(--muted)"> pts</span></div></div>` : '';
@@ -112,11 +111,11 @@
       <div style="padding-top:26px">${head}</div>
       ${stats}${lead}
       <div class="tabs" role="tablist">
-        <button role="tab" data-tab="standings" class="${tab === 'standings' ? 'on' : ''}">${locked || anyResults() ? 'Standings' : 'Who’s in'}</button>
-        ${locked || anyResults() ? `<button role="tab" data-tab="consensus" class="${tab === 'consensus' ? 'on' : ''}">Crowd picks</button>` : ''}
+        <button role="tab" data-tab="standings" class="${tab === 'standings' ? 'on' : ''}">Standings</button>
+        <button role="tab" data-tab="consensus" class="${tab === 'consensus' ? 'on' : ''}">Crowd picks</button>
         <button role="tab" data-tab="winners" class="${tab === 'winners' ? 'on' : ''}">Winners</button>
       </div>
-      ${locked || anyResults() ? '' : '<p class="tiny muted" style="margin:-6px 0 14px">Everyone’s picks stay sealed until the ceremony starts, so nobody can copy the crowd.</p>'}
+      ${publishedCount === 0 ? '<p class="tiny muted" style="margin:-6px 0 14px">Ballots appear here once Spencer adds them to the pool from the links you send him. Your own ballot shows from this device right away.</p>' : ''}
       <div id="panel"></div>
       <details class="add"><summary>Add ballot links to this view</summary>
         <p class="small muted" style="margin:10px 0 8px">Paste one or more ballot links. They are kept on this device only; the official pool is whatever the commissioner publishes.</p>
@@ -142,16 +141,15 @@
   function standings(rows) {
     if (!rows.length) return '<div class="empty">No ballots yet. Be the first: <a href="./">make yours</a>.</div>';
     const has = anyResults();
-    const sealed = !G.isLocked() && !has;
     const html = rows.map((r, i) => {
       const b = r.ballot, isMe = me && me.code === b.code;
       const aig = b.picks.aiguille == null ? '—' : G.watchLabel(b.picks.aiguille);
-      const open = !sealed && openRow === String(i);
-      const nameCell = sealed && !isMe ? `<span style="font-weight:700">${esc(b.name)}</span><div class="tiny muted">Ballot sealed</div>` : `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? ' <span class="pill gray">you</span>' : ''}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
+      const open = openRow === String(i);
+      const nameCell = `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? ' <span class="pill gray">you</span>' : ''}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
       return `<tr class="${isMe ? 'me' : ''} ${open ? 'open' : ''}"><td class="rank ${has && r.rank === 1 ? 'gold' : ''}">${has ? r.rank : ''}</td><td>${nameCell}</td><td class="num pts">${has ? r.pts : '<span class="muted" style="font-weight:400">—</span>'}</td><td class="num small muted">${has ? r.correct + '/' + r.announced : esc(G.fmtDate(b.ts))}</td></tr>${open ? `<tr class="exp"><td colspan="4">${picksGrid(r)}</td></tr>` : ''}`;
     }).join('');
     const lateNote = late.length ? `<p class="small muted" style="margin-top:12px">${late.length} ${late.length === 1 ? 'ballot' : 'ballots'} arrived after the lock and ${late.length === 1 ? 'is' : 'are'} not counted: ${esc(late.map(b => b.name).join(', '))}.</p>` : '';
-    return `<table class="tbl"><thead><tr><th></th><th>Name</th><th class="num">Pts</th><th class="num">${has ? 'Called' : 'Submitted'}</th></tr></thead><tbody>${html}</tbody></table><p class="tiny muted" style="margin-top:10px">${sealed ? 'Picks are revealed once the ceremony starts.' : 'Tap a name to see every pick.'}</p>${lateNote}`;
+    return `<table class="tbl"><thead><tr><th></th><th>Name</th><th class="num">Pts</th><th class="num">${has ? 'Called' : 'Submitted'}</th></tr></thead><tbody>${html}</tbody></table><p class="tiny muted" style="margin-top:10px">Tap a name to see every pick.</p>${lateNote}`;
   }
   function picksGrid(r) {
     return `<div class="picksgrid">${r.detail.map(d => { const w = d.pick == null ? null : D.watches[d.pick]; const cls = d.state === 'hit' ? 'hit' : d.state === 'miss' ? 'miss' : ''; return `<div class="pk ${cls}" ${w ? `data-detail="${w.id}" role="button" tabindex="0"` : ''}><div class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}${d.state === 'hit' ? '<span class="st">✓ ' + d.prize.pts + 'pt</span>' : d.state === 'miss' ? '<span class="st">✗</span>' : ''}</div><i>${esc(d.prize.name)}</i>${w ? `<b>${esc(w.brand)}</b>${esc(w.name)}` : '<b class="muted">no pick</b>'}</div>`; }).join('')}</div>`;
