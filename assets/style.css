@@ -276,3 +276,10 @@ button.mini:hover .pic, .gp:hover .pic { border-color: var(--ink); }
 .cpick i { display: block; font-style: normal; color: var(--good); font-weight: 700; font-size: 11px; }
 .cpick.hit .pic { box-shadow: inset 0 0 0 2px var(--good); border-color: var(--good); }
 .cmprow { grid-template-columns: 1fr auto; }
+.cmphead { font-weight: 800; text-transform: uppercase; font-size: 12px; border-bottom: 1px solid var(--ink); padding: 6px 0; position: sticky; top: 54px; background: var(--bg); z-index: 3; }
+.cmphead div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cmpline { padding: 10px 0; border-bottom: 1px solid var(--hair); }
+.cmpline .plabel { margin-bottom: 6px; }
+.cmpline.same { background: #f2f9f4; margin: 0 -8px; padding: 10px 8px; }
+@media (max-width: 600px) { .cpick { grid-template-columns: 1fr; gap: 4px; } .cpick .pic { width: 64px; height: 64px; } }

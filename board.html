@@ -178,11 +178,11 @@
     const A = ballots[cmpA], B = ballots[cmpB]; const c = G.compareBallots(A, B);
     const sel = (id, cur) => `<select class="sel" id="${id}" aria-label="${id === 'ca' ? 'First' : 'Second'} ballot">${ballots.map((b, i) => `<option value="${i}" ${i === cur ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>`;
     const cell = (id, win) => { if (id == null) return '<span class="muted">—</span>'; const w = D.watches[id]; const hit = win !== undefined && win === id; return `<span class="cpick ${hit ? 'hit' : ''}" data-detail="${id}" role="button" tabindex="0"><span class="pic"><img src="${G.thumb(id)}" alt="" loading="lazy"></span><span><b>${esc(w.brand)}</b><span>${esc(w.name)}</span>${hit ? '<i>✓ winner</i>' : ''}</span></span>`; };
-    const rows = c.rows.map(r => { const win = Object.prototype.hasOwnProperty.call(results, r.prize.key) ? results[r.prize.key] : undefined; return `<tr class="${r.same ? 'same' : r.both ? 'diff' : ''}"><td><span class="plabel">${esc(r.prize.name)}</span><div class="tiny ${r.same ? 'agree' : 'muted'}">${r.same ? 'Agree' : r.both ? 'Differ' : ''}</div></td><td>${cell(r.a, win)}</td><td>${cell(r.b, win)}</td></tr>`; }).join('');
+    const rows = c.rows.map(r => { const win = Object.prototype.hasOwnProperty.call(results, r.prize.key) ? results[r.prize.key] : undefined; return `<div class="cmpline ${r.same ? 'same' : r.both ? 'diff' : ''}"><div class="plabel">${esc(r.prize.name)} <span class="${r.same ? 'agree' : 'muted'}">${r.same ? '· Agree' : r.both ? '· Differ' : ''}</span></div><div class="pair">${cell(r.a, win)}${cell(r.b, win)}</div></div>`; }).join('');
     const closest = ballots.map((b, i) => ({ i, name: b.name, c: G.compareBallots(A, b) })).filter(x => x.i !== cmpA).sort((x, y) => y.c.same - x.c.same || x.name.localeCompare(y.name));
     return `<div class="cmpsel">${sel('ca', cmpA)}<span class="vs">vs</span>${sel('cb', cmpB)}</div>
       <div class="cmpsum"><b>${c.same} of ${c.n}</b> picks in common · <b>${c.pct}%</b> overlap${c.rows.some(r => r.same && r.prize.key === 'aiguille') ? ' · same Aiguille d’Or' : ''}</div>
-      <div class="tblwrap"><table class="tbl cmptbl"><thead><tr><th>Prize</th><th>${esc(A.name)}</th><th>${esc(B.name)}</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="cmphead pair"><div>${esc(A.name)}</div><div>${esc(B.name)}</div></div>${rows}
       <div class="sechead">Closest to ${esc(A.name)}</div><div class="rows">${closest.map(x => `<button type="button" class="row cmprow" data-cmp="${x.i}"><span class="t"><b>${esc(x.name)}</b><span>${x.c.same} of ${x.c.n} in common</span></span><span class="mark">${x.c.pct}%</span></button>`).join('')}</div>`;
   }
   function consensusView() {
