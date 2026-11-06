@@ -67,7 +67,7 @@
   'use strict';
   const G = window.GPHG, esc = G.esc;
   let D = null;
-  const STEPS = Array.from({ length: 14 }, (_, i) => 'cat-' + i).concat(['aiguille', 'bonus', 'review']);
+  const STEPS = Array.from({ length: 14 }, (_, i) => 'cat-' + i).concat(['aiguille', 'review']);
   const S = { name: '', picks: G.emptyPicks(), step: null, submitted: null, viewing: null, lastStep: null };
   const app = document.getElementById('app');
   let sheetDepth = 0;
@@ -104,6 +104,7 @@
     }
     if (location.search) history.replaceState(null, '', location.pathname + h);   // leave a friend's ?b= behind once you move on
     const s = h.match(/^#s=([a-z0-9-]+)/);
+    if (s && s[1] === 'bonus') return render('review');
     if (s && (STEPS.includes(s[1]) || s[1] === 'landing' || s[1] === 'card')) return render(s[1]);
     if (S.submitted) return render('card');
     render('landing');
@@ -125,7 +126,6 @@
     if (step === 'landing') renderLanding();
     else if (step.startsWith('cat-')) renderCat(+step.slice(4));
     else if (step === 'aiguille') renderAiguille();
-    else if (step === 'bonus') renderBonus();
     else if (step === 'review') renderReview();
     else if (step === 'card') renderCard(S.submitted, 'own');
     else if (step === 'view') renderCard(S.viewing, 'view');
@@ -196,8 +196,8 @@
           <div class="sechead" style="margin-top:0">How it works</div>
           <div class="steps">
             <div><span class="n">1</span><div><b>Pick a winner in all 14 categories</b><span>Six nominees each. Tap a watch to pick it, tap ⓘ to see photos, specs, price and the brand’s pitch.</span></div></div>
-            <div><span class="n">2</span><div><b>Name the Aiguille d’Or</b><span>Best in show, worth 3 points. Then an optional bonus round for the jury’s special prizes.</span></div></div>
-            <div><span class="n">3</span><div><b>Lock it in and you’re in</b><span>Your ballot goes straight into the pool. Compare picks with everyone on the standings page, then see who called it after the ceremony.</span></div></div>
+            <div><span class="n">2</span><div><b>Name the Aiguille d’Or</b><span>Best in show, worth 3 points. Bonus picks for the jury’s special prizes are optional.</span></div></div>
+            <div><span class="n">3</span><div><b>Submit and you’re in</b><span>One tap puts your ballot in the pool. Compare picks with everyone on the standings page, then see who called it after the ceremony.</span></div></div>
           </div>
           <div class="sechead">Scoring</div>
           <p class="scoring"><b>1 point</b> per category winner (14). <b>3 points</b> for the Aiguille d’Or. <b>1 bonus point</b> each for Audacity, Horological Revelation and Chronometry, if the jury awards them. Ties go to whoever called more prizes, then to the earlier ballot.</p>
@@ -286,7 +286,7 @@
       <div class="actions">
         <button class="btn ghost" id="back">← Back</button>
         <span class="hint" id="hint"></span>
-        <button class="btn" id="next" ${S.picks.aiguille == null ? 'disabled' : ''}>Next →</button>
+        <button class="btn" id="next" ${S.picks.aiguille == null ? 'disabled' : ''}>Review &amp; submit →</button>
       </div>`;
     const list = app.querySelector('#list'), q = app.querySelector('#q');
     const draw = () => {
@@ -310,38 +310,14 @@
       S.picks.aiguille = id; saveDraft(); draw(); app.querySelector('#next').disabled = false;
     });
     app.querySelector('#back').addEventListener('click', () => go('cat-13'));
-    app.querySelector('#next').addEventListener('click', () => go('bonus'));
+    app.querySelector('#next').addEventListener('click', () => go('review'));
     draw();
   }
   function row(w, tag, on) {
     return `<button type="button" class="row ${on ? 'on' : ''}" data-id="${w.id}"><span class="pic"><img src="${G.thumb(w.id)}" alt="" loading="lazy"></span><span class="t"><b>${esc(w.brand)}</b><span>${esc(w.name)}</span><i>${esc(tag)} · ${esc(w.priceLabel)}</i></span><span class="mark">${on ? 'Your pick' : '<span class="linkbtn peek">Details</span>'}</span></button>`;
   }
 
-  /* ---------- bonus specials ---------- */
-  function renderBonus() {
-    const sps = D.specials.slice(1);
-    app.innerHTML = `
-      ${lockedNotice()}
-      <div class="roundhead">
-        <div><div class="eyebrow">Bonus round · optional</div><h1 class="title big"><b>Special prizes</b><span>Only if the jury awards them</span></h1></div>
-        <div class="ptsbadge">1 pt each</div>
-        <p class="blurb">The jury hands these out only when something deserves it. Call one right for a bonus point. Guess wrong, or skip, and nothing is lost.</p>
-      </div>
-      <div id="bonus">${sps.map(bonusRow).join('')}</div>
-      <div class="actions">
-        <button class="btn ghost" id="back">← Back</button>
-        <span class="hint">You can leave any of these blank</span>
-        <button class="btn" id="next">Review ballot →</button>
-      </div>`;
-    const host = app.querySelector('#bonus');
-    host.addEventListener('click', e => {
-      const b = e.target.closest('[data-pick]'); const c = e.target.closest('[data-clear]');
-      if (b) { const key = b.dataset.pick; openPicker({ title: D.specials.find(s => s.id === key).name, current: S.picks[key], onPick: id => { S.picks[key] = id; saveDraft(); host.innerHTML = sps.map(bonusRow).join(''); } }); }
-      if (c) { S.picks[c.dataset.clear] = null; saveDraft(); host.innerHTML = sps.map(bonusRow).join(''); }
-    });
-    app.querySelector('#back').addEventListener('click', () => go('aiguille'));
-    app.querySelector('#next').addEventListener('click', () => go('review'));
-  }
+  /* ---------- bonus specials (rendered inside the review page) ---------- */
   function bonusRow(sp) {
     const id = S.picks[sp.id];
     const w = id == null ? null : D.watches[id];
@@ -353,36 +329,47 @@
   function renderReview() {
     const missing = S.picks.cats.filter(x => x == null).length + (S.picks.aiguille == null ? 1 : 0);
     const rows = D.categories.map((c, i) => reviewRow(c.name, S.picks.cats[i], 'cat-' + i)).join('');
-    const bonus = D.specials.slice(1).map(sp => S.picks[sp.id] == null ? '' : reviewRow(sp.short, S.picks[sp.id], 'bonus')).join('');
+    const sps = D.specials.slice(1);
     app.innerHTML = `
       ${lockedNotice()}
       <div class="roundhead">
-        <div><div class="eyebrow">Final check</div><h1 class="title big"><b>Review your ballot</b><span>Tap any pick to change it</span></h1></div>
+        <div><div class="eyebrow">Last step</div><h1 class="title big"><b>${missing ? 'Almost there' : 'Submit your ballot'}</b><span>${missing ? 'Fill the blanks below' : 'One tap and you’re in the pool'}</span></h1></div>
       </div>
       ${missing ? `<div class="notice red">${missing} required ${missing === 1 ? 'pick is' : 'picks are'} still blank. Tap a blank row to fill it in.</div>` : ''}
-      <div class="field"><label for="name2">Your name</label><input class="input" id="name2" type="text" maxlength="40" value="${esc(S.name)}" placeholder="Your name" autocomplete="name"></div>
-      <div class="sechead">Grand Prix<span class="pts">3 pts</span></div>
+      <div class="field" id="namewrap">${S.name ? `<div class="small">Playing as <b>${esc(S.name)}</b> · <button type="button" class="linkbtn" id="chgname">change</button></div><input class="input hidden" id="name2" type="text" maxlength="40" value="${esc(S.name)}" autocomplete="name">` : `<label for="name2">Your name</label><input class="input" id="name2" type="text" maxlength="40" value="" placeholder="Your name" autocomplete="name">`}</div>
+      <div class="actions" style="position:static;border-top:0;padding-top:0;margin-top:4px"><button class="btn big red" id="lock" ${missing || G.isLocked() ? 'disabled' : ''}>Submit ballot</button></div>
+      <p class="tiny muted" style="margin:-4px 0 18px">Your ballot joins the pool straight away. You can still edit it until the ceremony starts.</p>
+      <div class="sechead" style="margin-top:10px">Grand Prix<span class="pts">3 pts</span></div>
       ${reviewRow('Aiguille d’Or', S.picks.aiguille, 'aiguille')}
       <div class="sechead">Categories<span class="pts">1 pt each</span></div>
       ${rows}
-      <div class="sechead">Bonus prizes<span class="pts">1 pt each</span></div>
-      ${bonus || '<div class="empty" style="margin:8px 0">No bonus picks. <button class="linkbtn" data-go="bonus">Add some</button> or leave it.</div>'}
+      <div class="sechead">Bonus picks · optional<span class="pts">1 pt each</span></div>
+      <p class="small muted" style="margin:0 0 12px">The jury only hands these out when something deserves it. Call one right for a bonus point; skip them freely.</p>
+      <div id="bonus">${sps.map(bonusRow).join('')}</div>
       <div class="actions">
         <button class="btn ghost" id="back">← Back</button>
-        <button class="btn red" id="lock" ${missing || G.isLocked() ? 'disabled' : ''}>Lock it in</button>
+        <button class="btn red" id="lock2" ${missing || G.isLocked() ? 'disabled' : ''}>Submit ballot</button>
       </div>`;
     app.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
-    app.querySelector('#name2').addEventListener('input', e => { S.name = e.target.value; saveDraft(); });
-    app.querySelector('#back').addEventListener('click', () => go('bonus'));
+    const nm = app.querySelector('#name2'); nm.addEventListener('input', e => { S.name = e.target.value; saveDraft(); });
+    const chg = app.querySelector('#chgname'); if (chg) chg.addEventListener('click', () => { nm.classList.remove('hidden'); chg.parentElement.classList.add('hidden'); nm.focus(); });
+    const host = app.querySelector('#bonus');
+    host.addEventListener('click', e => {
+      const b = e.target.closest('[data-pick]'); const c = e.target.closest('[data-clear]');
+      if (b) { const key = b.dataset.pick; openPicker({ title: D.specials.find(s => s.id === key).name, current: S.picks[key], onPick: id => { S.picks[key] = id; saveDraft(); host.innerHTML = sps.map(bonusRow).join(''); } }); }
+      if (c) { S.picks[c.dataset.clear] = null; saveDraft(); host.innerHTML = sps.map(bonusRow).join(''); }
+    });
+    app.querySelector('#back').addEventListener('click', () => go('aiguille'));
     app.querySelector('#lock').addEventListener('click', submit);
+    app.querySelector('#lock2').addEventListener('click', submit);
   }
   function reviewRow(label, id, goTo) {
     const w = id == null ? null : D.watches[id];
     return `<button type="button" class="row reviewrow ${w ? '' : 'missing'}" data-go="${goTo}"><span class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}</span><span class="t"><i>${esc(label)}</i>${w ? `<b>${esc(w.brand)}</b><span>${esc(w.name)}</span>` : '<b>No pick yet</b><span>Tap to choose</span>'}</span><span class="mark">${w ? 'Change' : 'Pick'}</span></button>`;
   }
   function submit() {
-    const name = (app.querySelector('#name2').value || S.name || '').trim();
-    if (!name) { app.querySelector('#name2').focus(); toast('Add your name first'); return; }
+    const nmEl = app.querySelector('#name2'); const name = ((nmEl && nmEl.value) || S.name || '').trim();
+    if (!name) { if (nmEl) { nmEl.classList.remove('hidden'); nmEl.focus(); } toast('Add your name first'); return; }
     if (G.isLocked()) { toast('Ballots are locked'); return; }
     S.name = name;
     const ballot = { name, picks: S.picks, ts: Date.now() };
@@ -413,12 +400,12 @@
       </div></section>
       ${own ? `<div class="share">
         <div id="poolstatus">${poolHTML()}</div>
-        <h2 class="title" style="margin-top:6px"><b>Share your ballot</b><span>Compare picks with the group</span></h2>
+        <h2 class="title" style="margin-top:6px"><b>You’re in</b><span>Compare picks with the group</span></h2>
         <div class="btns">
-          <button class="btn red" id="share">Share</button>
-          <button class="btn" id="copy">Copy link</button>
+          <a class="btn red" href="board.html">Everyone’s picks</a>
+          <button class="btn" id="share">Share</button>
+          <button class="btn ghost" id="copy">Copy link</button>
           <button class="btn ghost" id="dl">Download</button>
-          <a class="btn ghost" href="board.html">Everyone’s picks</a>
         </div>
         <div class="linkbox"><code id="url">${esc(url)}</code></div>
         <p class="small muted" style="margin:12px 0 0">${G.isLocked() ? 'The ceremony has started, so picks are final.' : 'Changed your mind? <button class="linkbtn" data-act="edit">Edit picks</button> until the ceremony starts; the pool keeps your latest ballot.'}</p>
