@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;700;800&display=swap">
-<link rel="stylesheet" href="assets/style.css?v=20261106c">
+<link rel="stylesheet" href="assets/style.css?v=20261107a">
 <style>
   body.noscroll { overflow: hidden; }
   .statgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--ink); margin: 20px 0 0; }
@@ -68,7 +68,7 @@
 <footer><div class="wrap">Nominee details and photographs are from <a href="https://www.gphg.org/en/gphg-2026/nominated-timepieces" target="_blank" rel="noopener">gphg.org</a>, © Fondation du Grand Prix d'Horlogerie de Genève. This is a friends' prediction pool and is not affiliated with the GPHG.</div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/core.js?v=20261106c"></script>
+<script src="assets/core.js?v=20261107a"></script>
 <script>
 (function () {
   'use strict';
@@ -116,7 +116,7 @@
     else head = `<div class="eyebrow">Standings · ${ann} of ${G.prizeList().length} prizes announced</div><h1 class="title big"><b>${ann >= G.prizeList().length ? 'Final standings' : 'Live standings'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1>`;
     const stats = `<div class="statgrid"><div class="stat"><b>${n}</b><span>Ballots</span></div><div class="stat"><b>${ann}<small style="font-size:16px;color:var(--muted)">/${G.prizeList().length}</small></b><span>Prizes announced</span></div><div class="stat"><b>${leader && anyResults() ? leader.pts : '—'}</b><span>${leader && anyResults() ? 'Top score' : 'Top score tbd'}</span></div></div>`;
     const top = G.leaders(rows);
-    const lead = leader && anyResults() ? `<div class="leader"><div><div class="eyebrow">${top.length > 1 ? (ann >= G.prizeList().length ? 'Tied winners' : 'Tied for the lead') : (ann >= G.prizeList().length ? 'Winner' : 'Currently leading')}</div><h2>${esc(top.map(r => r.ballot.name).join(' · '))}</h2><div class="small muted">${leader.correct} of ${leader.announced} announced prizes called</div></div><div class="big">${leader.pts}<span style="font-size:14px;color:var(--muted)"> pts</span></div></div>` : '';
+    const lead = leader && anyResults() ? `<div class="leader"><div><div class="eyebrow">${top.length > 1 ? (ann >= G.prizeList().length ? 'Tied winners' : 'Tied for the lead') : (ann >= G.prizeList().length ? 'Winner' : 'Currently leading')}</div><h2>${esc(top.map(r => r.ballot.name).join(' · '))}</h2><div class="small muted">${leader.correct} of ${leader.announced} announced prizes called</div></div><div class="big">${leader.pts}<span style="font-size:14px;color:var(--muted)"> pts</span>${G.rating(leader.pts, leader.announced) ? `<div class="tiny muted" style="font-weight:700;text-align:right">${esc(G.rating(leader.pts, leader.announced))}</div>` : ''}</div></div>` : '';
     app.innerHTML = `
       <div style="padding-top:26px">${head}</div>
       ${stats}${lead}
@@ -165,7 +165,7 @@
       const open = openRow === String(i);
       const prog = b.draft ? ` <span class="pill gray">in progress · ${G.filled(b.picks)} of 15</span>` : '';
       const nameCell = `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? (meUnsent ? ' <span class="pill warn">you · not sent yet</span>' : ' <span class="pill gray">you</span>') : ''}${prog}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
-      return `<tr class="${isMe ? 'me' : ''} ${open ? 'open' : ''}"><td class="rank ${has && r.rank === 1 ? 'gold' : ''}">${has ? r.rank : ''}</td><td>${nameCell}</td><td class="num pts">${has ? r.pts : '<span class="muted" style="font-weight:400">—</span>'}</td><td class="num small muted">${has ? r.correct + '/' + r.announced : esc(G.fmtDate(b.ts))}</td></tr>${open ? `<tr class="exp"><td colspan="4">${picksGrid(r)}<div style="margin-top:10px"><button class="btn sm ghost" data-cmpme="${ballots.indexOf(b)}">Compare ${esc(b.name)} with others</button></div></td></tr>` : ''}`;
+      return `<tr class="${isMe ? 'me' : ''} ${open ? 'open' : ''}"><td class="rank ${has && r.rank === 1 ? 'gold' : ''}">${has ? r.rank : ''}</td><td>${nameCell}</td><td class="num pts">${has ? r.pts + (G.rating(r.pts, r.announced) ? `<div class="tiny muted" style="font-weight:600;white-space:nowrap">${esc(G.rating(r.pts, r.announced))}</div>` : '') : '<span class="muted" style="font-weight:400">—</span>'}</td><td class="num small muted">${has ? r.correct + '/' + r.announced : esc(G.fmtDate(b.ts))}</td></tr>${open ? `<tr class="exp"><td colspan="4">${picksGrid(r)}<div style="margin-top:10px"><button class="btn sm ghost" data-cmpme="${ballots.indexOf(b)}">Compare ${esc(b.name)} with others</button></div></td></tr>` : ''}`;
     }).join('');
     const lateNote = late.length ? `<p class="small muted" style="margin-top:12px">${late.length} ${late.length === 1 ? 'ballot' : 'ballots'} arrived after the lock and ${late.length === 1 ? 'is' : 'are'} not counted: ${esc(late.map(b => b.name).join(', '))}.</p>` : '';
     return `<table class="tbl"><thead><tr><th></th><th>Name</th><th class="num">Pts</th><th class="num">${has ? 'Called' : 'Submitted'}</th></tr></thead><tbody>${html}</tbody></table><p class="tiny muted" style="margin-top:10px">Tap a name to see every pick.</p>${lateNote}`;

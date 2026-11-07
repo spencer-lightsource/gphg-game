@@ -1,1 +1,20 @@
-{}
+{
+ "aiguille": 40,
+ "time-only": 1,
+ "essential": 7,
+ "complication": 12,
+ "mechanical-exception": 18,
+ "gemset": 28,
+ "tourbillon": 32,
+ "chronograph": 39,
+ "calendar-astronomy": 42,
+ "sports": 49,
+ "jewellery": 55,
+ "artistic-crafts": 65,
+ "petite-aiguille": 70,
+ "challenge": 77,
+ "mechanical-clock": 81,
+ "audacity": 23,
+ "revelation": 14,
+ "chronometry": 21
+}

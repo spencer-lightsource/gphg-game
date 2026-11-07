@@ -221,6 +221,15 @@
     return { clean, dropped };
   }
 
+  // A playful rating for a finished pool (out of 20 points).
+  function rating(pts, announced) {
+    if (!announced) return null;
+    if (pts >= 14) return 'Oracle';
+    if (pts >= 10) return 'Jury whisperer';
+    if (pts >= 7) return 'Sharp eye';
+    if (pts >= 4) return 'Enthusiast';
+    return 'Wildcard';
+  }
   // Everyone sharing the top rank.
   function leaders(rows) { return rows.filter(r => r.rank === 1); }
 
@@ -248,5 +257,5 @@
   function watchLabel(id) { const w = DATA.watches[id]; return w ? w.brand + ' ' + w.name : '—'; }
   function possessive(name) { name = String(name || '').trim(); return /s$/i.test(name) ? name + '’' : name + '’s'; }
 
-  window.GPHG = { SITE, POOL, LOCK_AT, CAT_COUNT, SPECIALS, KEYS, loadData, loadJSON, get data() { return DATA; }, watchesInCat, catOf, thumb, full, emptyPicks, cleanName, nameKey, encodeBallot, decodeBallot, ballotURL, prizeList, pickFor, scoreBallot, maxPoints, rankBallots, mergeBallots, sanitizeResults, leaders, consensus, compareBallots, deviceToken, poolSubmit, poolList, poolDraft, filled, poolResults, poolSetResults, poolDelete, lsGet, lsSet, lsDel, esc, fmtDate, fmtLock, isLocked, watchLabel, possessive };
+  window.GPHG = { SITE, POOL, LOCK_AT, CAT_COUNT, SPECIALS, KEYS, loadData, loadJSON, get data() { return DATA; }, watchesInCat, catOf, thumb, full, emptyPicks, cleanName, nameKey, encodeBallot, decodeBallot, ballotURL, prizeList, pickFor, scoreBallot, maxPoints, rankBallots, mergeBallots, sanitizeResults, leaders, rating, consensus, compareBallots, deviceToken, poolSubmit, poolList, poolDraft, filled, poolResults, poolSetResults, poolDelete, lsGet, lsSet, lsDel, esc, fmtDate, fmtLock, isLocked, watchLabel, possessive };
 })();
