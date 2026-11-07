@@ -293,3 +293,5 @@ button.mini:hover .pic, .gp:hover .pic { border-color: var(--ink); }
 .rtile.skipped .pic { border-style: dashed; }
 .rtile:hover .pic { border-color: var(--ink); }
 .rtile .brand.red { color: var(--red); } .rtile .brand.muted { color: var(--muted); font-weight: 500; }
+button.mini { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; }
+.minigrid { align-items: start; }
