@@ -139,8 +139,10 @@
     const ballots = [];
     for (const g of groups.values()) {
       g.sort((a, b) => (a.received || a.ts) - (b.received || b.ts) || a.ts - b.ts);
-      const owner = (g.find(b => b.token) || {}).token || null;
-      const ok = g.filter(b => !b.token || !owner || b.token === owner);
+      const finals = g.filter(b => !b.draft);
+      const pool = finals.length ? finals : g;          // a finished ballot always beats drafts under the same name
+      const owner = (pool.find(b => b.token) || {}).token || null;
+      const ok = pool.filter(b => !b.token || !owner || b.token === owner);
       ok.sort((a, b) => b.ts - a.ts || (b.received || 0) - (a.received || 0));
       if (ok.length) ballots.push(ok[0]);
     }
@@ -164,8 +166,18 @@
     const res = await fetch(POOL + '/ballots', { cache: 'no-store' });
     if (!res.ok) throw new Error('pool ' + res.status);
     const j = await res.json();
-    return (j.ballots || []).map(x => { const d = decodeBallot(x.code); if (!d) return null; d.received = Number(x.received) || d.ts; d.token = x.token || null; d.poolId = x.id || null; return d; }).filter(Boolean);
+    const conv = (x, draft) => { const d = decodeBallot(x.code); if (!d) return null; d.received = Number(x.received) || d.ts; d.token = x.token || null; d.poolId = x.id || null; d.draft = !!draft; return d; };
+    const list = (j.ballots || []).map(x => conv(x, false)).filter(Boolean);
+    (j.drafts || []).forEach(x => { const d = conv(x, true); if (d) list.push(d); });
+    return list;
   }
+  // In-progress ballot: one per device, overwritten on every change. Sent as text/plain so the browser needs no preflight and can use keepalive on page hide.
+  async function poolDraft(draft) {
+    const res = await fetch(POOL + '/drafts', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ code: draft.code, name: draft.name, ts: draft.ts, token: deviceToken() }) });
+    if (!res.ok) throw new Error('pool ' + res.status);
+    return res.json();
+  }
+  function filled(picks) { return picks.cats.filter(x => x != null).length + (picks.aiguille != null ? 1 : 0); }
   async function poolResults() {
     const res = await fetch(POOL + '/results', { cache: 'no-store' });
     if (!res.ok) throw new Error('pool ' + res.status);
@@ -236,5 +248,5 @@
   function watchLabel(id) { const w = DATA.watches[id]; return w ? w.brand + ' ' + w.name : '—'; }
   function possessive(name) { name = String(name || '').trim(); return /s$/i.test(name) ? name + '’' : name + '’s'; }
 
-  window.GPHG = { SITE, POOL, LOCK_AT, CAT_COUNT, SPECIALS, KEYS, loadData, loadJSON, get data() { return DATA; }, watchesInCat, catOf, thumb, full, emptyPicks, cleanName, nameKey, encodeBallot, decodeBallot, ballotURL, prizeList, pickFor, scoreBallot, maxPoints, rankBallots, mergeBallots, sanitizeResults, leaders, consensus, compareBallots, deviceToken, poolSubmit, poolList, poolResults, poolSetResults, poolDelete, lsGet, lsSet, lsDel, esc, fmtDate, fmtLock, isLocked, watchLabel, possessive };
+  window.GPHG = { SITE, POOL, LOCK_AT, CAT_COUNT, SPECIALS, KEYS, loadData, loadJSON, get data() { return DATA; }, watchesInCat, catOf, thumb, full, emptyPicks, cleanName, nameKey, encodeBallot, decodeBallot, ballotURL, prizeList, pickFor, scoreBallot, maxPoints, rankBallots, mergeBallots, sanitizeResults, leaders, consensus, compareBallots, deviceToken, poolSubmit, poolList, poolDraft, filled, poolResults, poolSetResults, poolDelete, lsGet, lsSet, lsDel, esc, fmtDate, fmtLock, isLocked, watchLabel, possessive };
 })();

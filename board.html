@@ -92,7 +92,8 @@
     publishedCount = published.length + pooled.length;
     const extra = (G.lsGet(G.KEYS.extra, []) || []).map(G.decodeBallot).filter(Boolean);
     const mine = G.lsGet(G.KEYS.ballot); if (mine && mine.code) { me = G.decodeBallot(mine.code); }
-    meUnsent = !!(me && !published.some(x => x.code === me.code) && !pooled.some(x => x.code === me.code));
+    if (!me) { const dr = G.lsGet(G.KEYS.draft); if (dr && dr.name && dr.picks && G.filled(Object.assign(G.emptyPicks(), dr.picks)) > 0) { const c = G.encodeBallot({ name: dr.name, picks: Object.assign(G.emptyPicks(), dr.picks), ts: dr.draftTs || Date.now() }); me = G.decodeBallot(c); if (me) me.draft = true; } }
+    meUnsent = !!(me && !me.draft && !published.some(x => x.code === me.code) && !pooled.some(x => x.code === me.code));
     // ballots passed in the URL (#add=code,code) are merged for this viewer only
     const addm = (location.hash || '').match(/[#&]add=([A-Za-z0-9_,-]+)/);
     const fromUrl = addm ? addm[1].split(',').map(G.decodeBallot).filter(Boolean) : [];
@@ -107,11 +108,11 @@
 
   function render() {
     const rows = G.rankBallots(ballots, results);
-    const n = ballots.length, ann = Object.keys(results).length;
+    const n = ballots.length, ann = Object.keys(results).length, inProg = ballots.filter(b => b.draft).length;
     const leader = rows[0];
     const locked = G.isLocked();
     let head;
-    if (!anyResults()) head = `<div class="eyebrow">Standings</div><h1 class="title big"><b>${locked ? 'The jury is deliberating' : 'The field is open'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1><p class="muted" style="margin:10px 0 0;max-width:620px">${locked ? 'Winners post here as they are announced in Geneva.' : 'Ballots lock ' + esc(G.fmtLock()) + '. Until then, see who’s in, compare picks and check what the crowd is backing.'}</p>`;
+    if (!anyResults()) head = `<div class="eyebrow">Standings</div><h1 class="title big"><b>${locked ? 'The jury is deliberating' : 'The field is open'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool${inProg ? ' · ' + inProg + ' in progress' : ''}</span></h1><p class="muted" style="margin:10px 0 0;max-width:620px">${locked ? 'Winners post here as they are announced in Geneva.' : 'Ballots lock ' + esc(G.fmtLock()) + '. Until then, see who’s in, compare picks and check what the crowd is backing.'}</p>`;
     else head = `<div class="eyebrow">Standings · ${ann} of ${G.prizeList().length} prizes announced</div><h1 class="title big"><b>${ann >= G.prizeList().length ? 'Final standings' : 'Live standings'}</b><span>${n} ${n === 1 ? 'ballot' : 'ballots'} in the pool</span></h1>`;
     const stats = `<div class="statgrid"><div class="stat"><b>${n}</b><span>Ballots</span></div><div class="stat"><b>${ann}<small style="font-size:16px;color:var(--muted)">/${G.prizeList().length}</small></b><span>Prizes announced</span></div><div class="stat"><b>${leader && anyResults() ? leader.pts : '—'}</b><span>${leader && anyResults() ? 'Top score' : 'Top score tbd'}</span></div></div>`;
     const top = G.leaders(rows);
@@ -162,7 +163,8 @@
       const b = r.ballot, isMe = me && me.code === b.code;
       const aig = b.picks.aiguille == null ? '—' : G.watchLabel(b.picks.aiguille);
       const open = openRow === String(i);
-      const nameCell = `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? (meUnsent ? ' <span class="pill warn">you · not sent yet</span>' : ' <span class="pill gray">you</span>') : ''}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
+      const prog = b.draft ? ` <span class="pill gray">in progress · ${G.filled(b.picks)} of 15</span>` : '';
+      const nameCell = `<button class="name" data-i="${i}">${esc(b.name)}${isMe ? (meUnsent ? ' <span class="pill warn">you · not sent yet</span>' : ' <span class="pill gray">you</span>') : ''}${prog}</button><div class="tiny muted">Aiguille d’Or: ${esc(aig)}</div>`;
       return `<tr class="${isMe ? 'me' : ''} ${open ? 'open' : ''}"><td class="rank ${has && r.rank === 1 ? 'gold' : ''}">${has ? r.rank : ''}</td><td>${nameCell}</td><td class="num pts">${has ? r.pts : '<span class="muted" style="font-weight:400">—</span>'}</td><td class="num small muted">${has ? r.correct + '/' + r.announced : esc(G.fmtDate(b.ts))}</td></tr>${open ? `<tr class="exp"><td colspan="4">${picksGrid(r)}<div style="margin-top:10px"><button class="btn sm ghost" data-cmpme="${ballots.indexOf(b)}">Compare ${esc(b.name)} with others</button></div></td></tr>` : ''}`;
     }).join('');
     const lateNote = late.length ? `<p class="small muted" style="margin-top:12px">${late.length} ${late.length === 1 ? 'ballot' : 'ballots'} arrived after the lock and ${late.length === 1 ? 'is' : 'are'} not counted: ${esc(late.map(b => b.name).join(', '))}.</p>` : '';

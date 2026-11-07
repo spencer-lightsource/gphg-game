@@ -67,7 +67,7 @@
   'use strict';
   const G = window.GPHG, esc = G.esc;
   let D = null;
-  const STEPS = Array.from({ length: 14 }, (_, i) => 'cat-' + i).concat(['aiguille', 'review']);
+  const STEPS = Array.from({ length: 14 }, (_, i) => 'cat-' + i).concat(['aiguille', 'audacity', 'revelation', 'chronometry', 'review']);
   const S = { name: '', picks: G.emptyPicks(), step: null, submitted: null, viewing: null, lastStep: null };
   const ARCHIVE = 'gphg26.archive';   // other people's locked ballots on this device
   function archive() { return (G.lsGet(ARCHIVE, []) || []).filter(x => x && x.code && G.decodeBallot(x.code)); }
@@ -80,12 +80,13 @@
     const sub = G.lsGet(G.KEYS.ballot);
     if (sub && sub.code) { const b = G.decodeBallot(sub.code); if (b) S.submitted = b; }
     const draft = G.lsGet(G.KEYS.draft);
-    if (draft) { S.name = draft.name || ''; S.picks = Object.assign(G.emptyPicks(), draft.picks || {}); S.lastStep = draft.step || null; }
+    if (draft) { S.name = draft.name || ''; S.picks = Object.assign(G.emptyPicks(), draft.picks || {}); S.lastStep = draft.step || null; S.draftTs = draft.draftTs || null; }
     else if (S.submitted) { S.name = S.submitted.name; S.picks = JSON.parse(JSON.stringify(S.submitted.picks)); }   // so Back from the card never shows a blank review
     if (!S.name) S.name = G.lsGet(G.KEYS.name, '') || '';
     if (history.state && history.state.sheet) history.replaceState(null, '');   // a sheet was open when the page was last unloaded
     document.getElementById('nav-mine').addEventListener('click', () => go('card'));
     if (S.submitted) syncPool();
+    if (draft && !S.submitted) setTimeout(syncDraft, 800);
     window.addEventListener('hashchange', route);
     window.addEventListener('popstate', () => {
       if (sheetDepth > 0) { closeSheet(true); return; }
@@ -116,7 +117,24 @@
     if (pendingBack) { pendingNav = step; return; }   // a sheet just closed via history.back(); navigate once that lands
     if (location.hash === '#s=' + step) render(step); else location.hash = '#s=' + step;
   }
-  function saveDraft() { G.lsSet(G.KEYS.draft, { name: S.name, picks: S.picks, step: S.step }); if (S.name) G.lsSet(G.KEYS.name, S.name); }
+  function saveDraft() {
+    if (!S.draftTs) S.draftTs = Date.now();
+    G.lsSet(G.KEYS.draft, { name: S.name, picks: S.picks, step: S.step, draftTs: S.draftTs });
+    if (S.name) G.lsSet(G.KEYS.name, S.name);
+    scheduleDraftSync();
+  }
+  // Progressive submission: an in-progress ballot shows on the standings as soon as it has a name and a pick.
+  let draftTimer = null, lastDraftCode = null;
+  function draftCode() { if (!S.name || G.filled(S.picks) === 0 || G.isLocked()) return null; return G.encodeBallot({ name: S.name, picks: S.picks, ts: S.draftTs || Date.now() }); }
+  function scheduleDraftSync() { clearTimeout(draftTimer); draftTimer = setTimeout(syncDraft, 1500); }
+  async function syncDraft() {
+    clearTimeout(draftTimer);
+    const code = draftCode(); if (!code || code === lastDraftCode) return;
+    if (S.submitted && JSON.stringify(S.submitted.picks) === JSON.stringify(S.picks)) return;   // nothing new beyond the locked ballot
+    try { await G.poolDraft({ code, name: S.name, ts: S.draftTs || Date.now() }); lastDraftCode = code; } catch (e) { /* retried on the next change or visit */ }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') syncDraft(); });
+  window.addEventListener('pagehide', syncDraft);
 
   function render(step) {
     if (sheetDepth > 0) closeSheet(false);
@@ -127,7 +145,7 @@
     window.scrollTo(0, 0);
     if (step === 'landing') renderLanding();
     else if (step.startsWith('cat-')) renderCat(+step.slice(4));
-    else if (step === 'aiguille') renderAiguille();
+    else if (['aiguille', 'audacity', 'revelation', 'chronometry'].includes(step)) renderSpecial(step);
     else if (step === 'review') renderReview();
     else if (step === 'card') renderCard(S.submitted, 'own');
     else if (step === 'view') renderCard(S.viewing, 'view');
@@ -199,8 +217,8 @@
           <div class="sechead" style="margin-top:0">How it works</div>
           <div class="steps">
             <div><span class="n">1</span><div><b>Pick a winner in all 14 categories</b><span>Six nominees each. Tap a watch to pick it, tap ⓘ to see photos, specs, price and the brand’s pitch.</span></div></div>
-            <div><span class="n">2</span><div><b>Name the Aiguille d’Or</b><span>Best in show, worth 3 points. Bonus picks for the jury’s special prizes are optional.</span></div></div>
-            <div><span class="n">3</span><div><b>Submit and you’re in</b><span>One tap puts your ballot in the pool. Compare picks with everyone on the standings page, then see who called it after the ceremony.</span></div></div>
+            <div><span class="n">2</span><div><b>Call the special prizes</b><span>The Aiguille d’Or (best in show, 3 points), then three optional bonus prizes worth a point each.</span></div></div>
+            <div><span class="n">3</span><div><b>Submit and you’re in</b><span>Your picks show on the standings as you go, marked in progress until you submit. Compare with everyone, then see who called it after the ceremony.</span></div></div>
           </div>
           <div class="sechead">Scoring</div>
           <p class="scoring"><b>1 point</b> per category winner (14). <b>3 points</b> for the Aiguille d’Or. <b>1 bonus point</b> each for Audacity, Horological Revelation and Chronometry, if the jury awards them. Ties go to whoever called more prizes, then to the earlier ballot.</p>
@@ -223,13 +241,15 @@
     G.lsSet(ARCHIVE, list.slice(0, 8));
   }
   function firstIncomplete() { const i = S.picks.cats.findIndex(x => x == null); if (i >= 0) return 'cat-' + i; if (S.picks.aiguille == null) return 'aiguille'; return 'review'; }
+  function nextStep(step) { const i = STEPS.indexOf(step); return STEPS[Math.min(i + 1, STEPS.length - 1)]; }
+  function prevStep(step) { const i = STEPS.indexOf(step); return i <= 0 ? 'landing' : STEPS[i - 1]; }
   function act(a) {
     if (a === 'resume') go(firstIncomplete());
     else if (a === 'reset') {
       const who = S.submitted ? S.submitted.name : S.name;
       if (!confirm(S.submitted ? `Start a new ballot for someone else? ${who}’s ballot stays in the pool, and you can switch back to it from this page.` : 'Start over with a blank ballot?')) return;
       stashCurrent();
-      S.name = ''; S.picks = G.emptyPicks(); S.submitted = null; G.lsDel(G.KEYS.draft); G.lsDel(G.KEYS.ballot); G.lsDel(G.KEYS.name); go('landing');
+      S.name = ''; S.picks = G.emptyPicks(); S.submitted = null; S.draftTs = null; lastDraftCode = null; G.lsDel(G.KEYS.draft); G.lsDel(G.KEYS.ballot); G.lsDel(G.KEYS.name); go('landing');
     }
     else if (a.startsWith('switch:')) {
       const code = a.slice(7); const target = archive().find(x => x.code === code); if (!target) return;
@@ -272,7 +292,7 @@
       if (e.target.closest('.pick')) pickCat(i, id);
     });
     app.querySelector('#back').addEventListener('click', () => go(i === 0 ? 'landing' : 'cat-' + (i - 1)));
-    app.querySelector('#next').addEventListener('click', () => go(i === 13 ? 'aiguille' : 'cat-' + (i + 1)));
+    app.querySelector('#next').addEventListener('click', () => go(nextStep('cat-' + i)));
     // warm the next round's thumbnails
     if (i < 13) G.watchesInCat(i + 1).forEach(w => { const im = new Image(); im.src = G.thumb(w.id); });
   }
@@ -292,82 +312,82 @@
     const n = app.querySelector('#next'); if (n) n.disabled = false;
   }
 
-  /* ---------- Aiguille d'Or ---------- */
-  function renderAiguille() {
-    const sp = D.specials[0];
-    const winners = S.picks.cats.map((id, i) => id == null ? null : { id, cat: D.categories[i].name }).filter(Boolean);
+  /* ---------- special prizes: Aiguille d'Or (required) and the three bonus prizes (optional) ---------- */
+  const SPECIAL_UI = {
+    aiguille: { eyebrow: 'Grand Prix · best in show', sub: 'The one watch above all', hint: 'Usually one of the category winners. Pick from yours below, or search every nominee.', shortlist: 'winners' },
+    audacity: { eyebrow: 'Bonus prize · optional', sub: 'The most daring watch', hint: 'For the nominee that breaks the rules: an odd display, a wild mechanism, a shape nobody expected. Skip if nothing grabs you.', shortlist: 'winners' },
+    revelation: { eyebrow: 'Bonus prize · optional', sub: 'Best from a young brand', hint: 'A standout from a brand less than ten years old. Search for the name you have in mind, or skip.', shortlist: 'winners' },
+    chronometry: { eyebrow: 'Bonus prize · optional', sub: 'Precision, certified', hint: 'Only officially certified movements qualify. The nominees that list a certification are below.', shortlist: 'certified' },
+  };
+  function renderSpecial(key) {
+    const sp = D.specials.find(x => x.id === key), ui = SPECIAL_UI[key];
+    const optional = !!sp.optional;
+    const winners = S.picks.cats.map((id, i) => id == null ? null : { id, tag: D.categories[i].name }).filter(Boolean);
+    const certified = D.watches.filter(w => w.specs.some(([k]) => k === 'Certification')).map(w => ({ id: w.id, tag: (w.specs.find(([k]) => k === 'Certification') || [])[1] + ' · ' + D.categories[G.catOf(w.id)].name }));
+    const short = ui.shortlist === 'certified' ? certified : winners;
+    const shortTitle = ui.shortlist === 'certified' ? 'Certified nominees' : 'Your category winners';
     app.innerHTML = `
       ${lockedNotice()}
       <div class="roundhead">
-        <div><div class="eyebrow">Grand Prix · best in show</div><h1 class="title big"><b>Aiguille d’Or</b><span>The one watch above all</span></h1></div>
-        <div class="ptsbadge red">${sp.pts} pts</div>
-        <p class="blurb">${esc(sp.blurb)} Pick from your category winners below, or search every nominee.</p>
+        <div><div class="eyebrow">${esc(ui.eyebrow)}</div><h1 class="title big"><b>${esc(sp.short)}</b><span>${esc(ui.sub)}</span></h1></div>
+        <div class="ptsbadge ${optional ? '' : 'red'}">${sp.pts} pt${sp.pts > 1 ? 's' : ''}</div>
+        <p class="blurb">${esc(sp.blurb)} ${esc(ui.hint)}</p>
       </div>
       <div class="search"><span aria-hidden="true">⌕</span><input id="q" type="search" placeholder="Search all 84 nominees" aria-label="Search all 84 nominees by brand or model" autocomplete="off"></div>
       <div id="list"></div>
       <div class="actions">
         <button class="btn ghost" id="back">← Back</button>
         <span class="hint" id="hint"></span>
-        <button class="btn" id="next" ${S.picks.aiguille == null ? 'disabled' : ''}>Review &amp; submit →</button>
+        <button class="btn" id="next" ${!optional && S.picks[key] == null ? 'disabled' : ''}>${S.picks[key] == null && optional ? 'Skip →' : 'Next →'}</button>
       </div>`;
     const list = app.querySelector('#list'), q = app.querySelector('#q');
+    const cur = () => S.picks[key];
     const draw = () => {
       const term = q.value.trim().toLowerCase();
       let html = '';
       if (term) {
         const hits = D.watches.filter(w => (w.brand + ' ' + w.name + ' ' + D.categories[G.catOf(w.id)].name).toLowerCase().includes(term));
-        html = `<div class="sechead">${hits.length} ${hits.length === 1 ? 'match' : 'matches'}</div><div class="rows">${hits.map(w => row(w, D.categories[G.catOf(w.id)].name, S.picks.aiguille === w.id)).join('') || '<div class="empty">No nominee matches that.</div>'}</div>`;
+        html = `<div class="sechead">${hits.length} ${hits.length === 1 ? 'match' : 'matches'}</div><div class="rows">${hits.map(w => row(w, D.categories[G.catOf(w.id)].name, cur() === w.id)).join('') || '<div class="empty">No nominee matches that.</div>'}</div>`;
       } else {
-        html = `<div class="sechead">Your category winners<span class="pts">${winners.length} of 14</span></div><div class="rows">${winners.map(x => row(D.watches[x.id], x.cat, S.picks.aiguille === x.id)).join('') || '<div class="empty">Pick your category winners first, or search above.</div>'}</div>`;
-        if (S.picks.aiguille != null && !winners.some(x => x.id === S.picks.aiguille)) html = `<div class="sechead">Your pick</div><div class="rows">${row(D.watches[S.picks.aiguille], D.categories[G.catOf(S.picks.aiguille)].name, true)}</div>` + html;
+        if (cur() != null && !short.some(x => x.id === cur())) html += `<div class="sechead">Your pick</div><div class="rows">${row(D.watches[cur()], D.categories[G.catOf(cur())].name, true)}</div>`;
+        html += `<div class="sechead">${shortTitle}<span class="pts">${short.length}</span></div><div class="rows">${short.map(x => row(D.watches[x.id], x.tag, cur() === x.id)).join('') || '<div class="empty">Pick your category winners first, or search above.</div>'}</div>`;
       }
       list.innerHTML = html;
-      app.querySelector('#hint').textContent = S.picks.aiguille == null ? 'Choose one nominee' : 'Your pick: ' + G.watchLabel(S.picks.aiguille);
+      app.querySelector('#hint').textContent = cur() == null ? (optional ? 'Optional: pick one or skip' : 'Choose one nominee') : 'Your pick: ' + D.watches[cur()].brand;
+      const n = app.querySelector('#next'); n.disabled = !optional && cur() == null; n.textContent = cur() == null && optional ? 'Skip →' : 'Next →';
     };
+    const setPick = id => { S.picks[key] = (optional && cur() === id) ? null : id; saveDraft(); draw(); };
     q.addEventListener('input', draw);
     list.addEventListener('click', e => {
       const r = e.target.closest('.row'); if (!r) return;
       const id = +r.dataset.id;
-      if (e.target.closest('.peek')) { openDetail(id, { pickable: true, pickLabel: 'Pick for Aiguille d’Or', onPick: () => { S.picks.aiguille = id; saveDraft(); draw(); app.querySelector('#next').disabled = false; } }); return; }
-      S.picks.aiguille = id; saveDraft(); draw(); app.querySelector('#next').disabled = false;
+      if (e.target.closest('.peek')) { openDetail(id, { pickable: true, pickLabel: 'Pick for ' + sp.short, onPick: () => { S.picks[key] = id; saveDraft(); draw(); } }); return; }
+      setPick(id);
     });
-    app.querySelector('#back').addEventListener('click', () => go('cat-13'));
-    app.querySelector('#next').addEventListener('click', () => go('review'));
+    app.querySelector('#back').addEventListener('click', () => go(prevStep(key)));
+    app.querySelector('#next').addEventListener('click', () => go(nextStep(key)));
     draw();
   }
   function row(w, tag, on) {
     return `<button type="button" class="row ${on ? 'on' : ''}" data-id="${w.id}"><span class="pic"><img src="${G.thumb(w.id)}" alt="" loading="lazy"></span><span class="t"><b>${esc(w.brand)}</b><span>${esc(w.name)}</span><i>${esc(tag)} · ${esc(w.priceLabel)}</i></span><span class="mark">${on ? 'Your pick' : '<span class="linkbtn peek">Details</span>'}</span></button>`;
   }
 
-  /* ---------- bonus specials (rendered inside the review page) ---------- */
-  function bonusRow(sp) {
-    const id = S.picks[sp.id];
-    const w = id == null ? null : D.watches[id];
-    return `<div class="bonusrow"><div><h3>${esc(sp.name)}</h3><p>${esc(sp.blurb)}</p>${w ? `<div class="sel"><span class="pic"><img src="${G.thumb(w.id)}" alt=""></span><span><b>${esc(w.brand)}</b><span>${esc(w.name)}</span></span></div>` : ''}</div>
-      <div class="side"><button class="btn sm ${w ? 'ghost' : ''}" data-pick="${sp.id}">${w ? 'Change' : 'Choose'}</button>${w ? `<button class="btn sm ghost" data-clear="${sp.id}">Clear</button>` : ''}</div></div>`;
-  }
-
   /* ---------- review & submit ---------- */
   function renderReview() {
     const missing = S.picks.cats.filter(x => x == null).length + (S.picks.aiguille == null ? 1 : 0);
-    const rows = D.categories.map((c, i) => reviewRow(c.name, S.picks.cats[i], 'cat-' + i)).join('');
-    const sps = D.specials.slice(1);
+    const tiles = [reviewTile('Aiguille d’Or · 3 pts', S.picks.aiguille, 'aiguille', true)]
+      .concat(D.categories.map((c, i) => reviewTile(c.name, S.picks.cats[i], 'cat-' + i, true)))
+      .concat(D.specials.slice(1).map(sp => reviewTile(sp.short + ' · bonus', S.picks[sp.id], sp.id, false)));
     app.innerHTML = `
       ${lockedNotice()}
       <div class="roundhead">
         <div><div class="eyebrow">Last step</div><h1 class="title big"><b>${missing ? 'Almost there' : 'Submit your ballot'}</b><span>${missing ? 'Fill the blanks below' : 'One tap and you’re in the pool'}</span></h1></div>
       </div>
-      ${missing ? `<div class="notice red">${missing} required ${missing === 1 ? 'pick is' : 'picks are'} still blank. Tap a blank row to fill it in.</div>` : ''}
+      ${missing ? `<div class="notice red">${missing} required ${missing === 1 ? 'pick is' : 'picks are'} still blank. Tap a blank tile to fill it in.</div>` : ''}
       <div class="field" id="namewrap">${S.name ? `<div class="small">Playing as <b>${esc(S.name)}</b> · <button type="button" class="linkbtn" id="chgname">change</button></div><input class="input hidden" id="name2" type="text" maxlength="40" value="${esc(S.name)}" autocomplete="name">` : `<label for="name2">Your name</label><input class="input" id="name2" type="text" maxlength="40" value="" placeholder="Your name" autocomplete="name">`}</div>
       <div class="actions" style="position:static;border-top:0;padding-top:0;margin-top:4px"><button class="btn big red" id="lock" ${missing || G.isLocked() ? 'disabled' : ''}>Submit ballot</button></div>
-      <p class="tiny muted" style="margin:-4px 0 18px">Your ballot joins the pool straight away. You can still edit it until the ceremony starts.</p>
-      <div class="sechead" style="margin-top:10px">Grand Prix<span class="pts">3 pts</span></div>
-      ${reviewRow('Aiguille d’Or', S.picks.aiguille, 'aiguille')}
-      <div class="sechead">Categories<span class="pts">1 pt each</span></div>
-      ${rows}
-      <div class="sechead">Bonus picks · optional<span class="pts">1 pt each</span></div>
-      <p class="small muted" style="margin:0 0 12px">The jury only hands these out when something deserves it. Call one right for a bonus point; skip them freely.</p>
-      <div id="bonus">${sps.map(bonusRow).join('')}</div>
+      <p class="tiny muted" style="margin:-4px 0 18px">Your ballot joins the pool straight away. Tap any tile to change it; you can edit until the ceremony starts.</p>
+      <div class="minigrid review">${tiles.join('')}</div>
       <div class="actions">
         <button class="btn ghost" id="back">← Back</button>
         <button class="btn red" id="lock2" ${missing || G.isLocked() ? 'disabled' : ''}>Submit ballot</button>
@@ -375,19 +395,14 @@
     app.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
     const nm = app.querySelector('#name2'); nm.addEventListener('input', e => { S.name = e.target.value; saveDraft(); });
     const chg = app.querySelector('#chgname'); if (chg) chg.addEventListener('click', () => { nm.classList.remove('hidden'); chg.parentElement.classList.add('hidden'); nm.focus(); });
-    const host = app.querySelector('#bonus');
-    host.addEventListener('click', e => {
-      const b = e.target.closest('[data-pick]'); const c = e.target.closest('[data-clear]');
-      if (b) { const key = b.dataset.pick; openPicker({ title: D.specials.find(s => s.id === key).name, current: S.picks[key], onPick: id => { S.picks[key] = id; saveDraft(); host.innerHTML = sps.map(bonusRow).join(''); } }); }
-      if (c) { S.picks[c.dataset.clear] = null; saveDraft(); host.innerHTML = sps.map(bonusRow).join(''); }
-    });
-    app.querySelector('#back').addEventListener('click', () => go('aiguille'));
+    app.querySelector('#back').addEventListener('click', () => go('chronometry'));
     app.querySelector('#lock').addEventListener('click', submit);
     app.querySelector('#lock2').addEventListener('click', submit);
   }
-  function reviewRow(label, id, goTo) {
+  function reviewTile(label, id, goTo, required) {
     const w = id == null ? null : D.watches[id];
-    return `<button type="button" class="row reviewrow ${w ? '' : 'missing'}" data-go="${goTo}"><span class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : ''}</span><span class="t"><i>${esc(label)}</i>${w ? `<b>${esc(w.brand)}</b><span>${esc(w.name)}</span>` : '<b>No pick yet</b><span>Tap to choose</span>'}</span><span class="mark">${w ? 'Change' : 'Pick'}</span></button>`;
+    const cls = w ? '' : required ? 'missing' : 'skipped';
+    return `<button type="button" class="mini rtile ${cls}" data-go="${goTo}" aria-label="${esc(label)}: ${w ? esc(w.brand + ' ' + w.name) : required ? 'no pick yet' : 'skipped'}"><div class="pic">${w ? `<img src="${G.thumb(w.id)}" alt="" loading="lazy">` : `<span class="ph">${required ? 'Pick' : 'Skipped'}</span>`}</div><div class="cat">${esc(label)}</div>${w ? `<div class="brand">${esc(w.brand)}</div><div class="model">${esc(w.name)}</div>` : `<div class="brand ${required ? 'red' : 'muted'}">${required ? 'Tap to pick' : 'Tap to add'}</div>`}</button>`;
   }
   function submit() {
     const nmEl = app.querySelector('#name2'); const name = ((nmEl && nmEl.value) || S.name || '').trim();
@@ -511,34 +526,6 @@
     el.querySelector('[data-close]').addEventListener('click', () => closeSheet());
     const pk = el.querySelector('[data-pick]'); if (pk) pk.addEventListener('click', () => { closeSheet(); opts.onPick && opts.onPick(); toast('Picked ' + w.brand); });
     showSheet(el);
-  }
-  function openPicker(opts) {
-    const el = document.createElement('div');
-    el.className = 'sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
-    el.innerHTML = `
-      <div class="bar"><div class="wrap in"><div class="eyebrow ink">${esc(opts.title)}</div><button class="x" aria-label="Close">×</button></div></div>
-      <div class="wrap" style="padding-bottom:110px">
-        <div class="search"><span aria-hidden="true">⌕</span><input id="pq" type="search" placeholder="Search all 84 nominees" autocomplete="off"></div>
-        <div id="plist" class="rows"></div>
-      </div>
-      <div class="actions"><div class="in"><button type="button" class="btn ghost" data-close>Cancel</button></div></div>`;
-    const list = el.querySelector('#plist'), q = el.querySelector('#pq');
-    const draw = () => {
-      const term = q.value.trim().toLowerCase();
-      const hits = D.watches.filter(w => !term || (w.brand + ' ' + w.name + ' ' + D.categories[G.catOf(w.id)].name).toLowerCase().includes(term));
-      list.innerHTML = hits.map(w => row(w, D.categories[G.catOf(w.id)].name, opts.current === w.id)).join('') || '<div class="empty">No nominee matches that.</div>';
-    };
-    q.addEventListener('input', draw);
-    list.addEventListener('click', e => {
-      const r = e.target.closest('.row'); if (!r) return; const id = +r.dataset.id;
-      if (e.target.closest('.peek')) { openDetail(id, { pickable: true, onPick: () => { closeSheet(); opts.onPick(id); } }); return; }
-      closeSheet(); opts.onPick(id);
-    });
-    el.querySelector('.x').addEventListener('click', () => closeSheet());
-    el.querySelector('[data-close]').addEventListener('click', () => closeSheet());
-    showSheet(el);
-    setTimeout(() => { try { q.focus({ preventScroll: true }); } catch (e) {} }, 50);
-    draw();
   }
   const focusStack = [];
   function setInert(on) { ['header', '#app', 'footer'].forEach(sel => { const el = document.querySelector(sel); if (el) { if (on) el.setAttribute('inert', ''); else el.removeAttribute('inert'); } }); }

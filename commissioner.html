@@ -74,7 +74,7 @@
       const k = b.name.trim().toLowerCase(); const kept = m.ballots.find(x => x.code === b.code);
       const isLate = Math.max(b.ts || 0, b.received || 0) >= G.LOCK_AT;
       const st = isLate ? '<span class="pill red">late</span>' : kept ? (dupes.get(k) > 1 ? '<span class="pill">latest of ' + dupes.get(k) + '</span>' : '<span class="pill gray">ok</span>') : '<span class="pill gray">superseded</span>';
-      return `<tr><td>${esc(b.name)}<div class="tiny muted">${b.source === 'pool' ? 'in the pool' : b.source === 'file' ? 'published file' : 'added here, not posted'}</div></td><td class="small muted">${esc(G.fmtDate(b.ts))}<br><span class="tiny">received ${esc(G.fmtDate(b.received || b.ts))}</span></td><td class="small">${b.picks.aiguille == null ? '—' : esc(G.watchLabel(b.picks.aiguille))}</td><td>${st}</td><td><button class="linkbtn" data-rm="${esc(b.code)}">remove</button></td></tr>`;
+      return `<tr><td>${esc(b.name)}<div class="tiny muted">${b.draft ? 'in progress · ' + G.filled(b.picks) + ' of 15' : b.source === 'pool' ? 'in the pool' : b.source === 'file' ? 'published file' : 'added here, not posted'}</div></td><td class="small muted">${esc(G.fmtDate(b.ts))}<br><span class="tiny">received ${esc(G.fmtDate(b.received || b.ts))}</span></td><td class="small">${b.picks.aiguille == null ? '—' : esc(G.watchLabel(b.picks.aiguille))}</td><td>${st}</td><td><button class="linkbtn" data-rm="${esc(b.code)}">remove</button></td></tr>`;
     }).join('');
     const ballotsJSON = JSON.stringify([...pool.values()].sort((a, b) => a.ts - b.ts).map(b => ({ name: b.name, submitted: new Date(b.ts).toISOString(), received: new Date(b.received || b.ts).toISOString(), code: b.code })), null, 1);
 

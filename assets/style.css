@@ -283,3 +283,13 @@ button.mini:hover .pic, .gp:hover .pic { border-color: var(--ink); }
 .cmpline .plabel { margin-bottom: 6px; }
 .cmpline.same { background: #f2f9f4; margin: 0 -8px; padding: 10px 8px; }
 @media (max-width: 600px) { .cpick { grid-template-columns: 1fr; gap: 4px; } .cpick .pic { width: 64px; height: 64px; } }
+
+/* review tiles */
+.minigrid.review { grid-template-columns: repeat(3, 1fr); gap: 14px 10px; }
+@media (min-width: 540px) { .minigrid.review { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 820px) { .minigrid.review { grid-template-columns: repeat(6, 1fr); } }
+.rtile .pic .ph { font-family: var(--cond); font-variation-settings: "wdth" 78; font-stretch: 78%; font-weight: 900; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.rtile.missing .pic { border: 2px dashed var(--red); } .rtile.missing .pic .ph { color: var(--red); }
+.rtile.skipped .pic { border-style: dashed; }
+.rtile:hover .pic { border-color: var(--ink); }
+.rtile .brand.red { color: var(--red); } .rtile .brand.muted { color: var(--muted); font-weight: 500; }
